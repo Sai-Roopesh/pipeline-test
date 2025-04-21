@@ -62,7 +62,7 @@ pipeline {
         withSonarQubeEnv('sonar') {
           sh '''
             sonar-scanner \
-              -Dsonar.host.url=http://10.25.x.x:9000\
+              -Dsonar.host.url=http://10.25.157.152:9000\
               -Dsonar.projectKey=pipeline-test \
               -Dsonar.projectName=pipeline-test \
               -Dsonar.sources=src/main/java \
