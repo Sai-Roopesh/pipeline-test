@@ -59,7 +59,8 @@ pipeline {
 
     stage('SonarQube Analysis') {
       steps {
-        withSonarQubeEnv('sonar') {
+        // inject SONAR_TOKEN from Jenkins credentials
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
           sh '''
             sonar-scanner \
               -Dsonar.host.url=http://10.25.157.152:9000 \
