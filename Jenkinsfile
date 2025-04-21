@@ -7,17 +7,18 @@ pipeline {
   }
 
   environment {
-    JAVA_HOME = tool 'Java 21'
-    M2_HOME   = tool 'Maven 3.8.1'
-    PATH      = "${JAVA_HOME}/bin:${M2_HOME}/bin:${env.PATH}"
+    JAVA_HOME    = tool 'Java 21'
+    M2_HOME      = tool 'Maven 3.8.1'
+    SCANNER_HOME = tool 'sonar-scanner'
+    PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
   }
 
   stages {
     stage('Checkout') {
       steps {
-        git branch:       'main',
-            url:          'https://github.com/Sai-Roopesh/pipeline-test.git',
-            credentialsId:'git-cred-test'
+        git branch:        'main',
+            url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
+            credentialsId: 'git-cred-test'
       }
     }
 
@@ -60,7 +61,7 @@ pipeline {
       steps {
         withSonarQubeEnv('sonar') {
           sh '''
-            $SCANNER_HOME/bin/sonar-scanner \
+            sonar-scanner \
               -Dsonar.projectKey=pipeline-test \
               -Dsonar.projectName=pipeline-test \
               -Dsonar.sources=src/main/java \
@@ -150,7 +151,7 @@ pipeline {
 
   post {
     always {
-      junit 'target/surefire-reports/*.xml'
+      junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
     }
   }
 }
