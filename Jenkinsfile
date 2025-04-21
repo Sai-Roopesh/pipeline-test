@@ -58,21 +58,24 @@ pipeline {
     }
 
     stage('SonarQube Analysis') {
-      steps {
-        // inject SONAR_TOKEN from Jenkins credentials
-        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-          sh '''
-            sonar-scanner \
-              -Dsonar.host.url=http://10.25.157.152:9000 \
-              -Dsonar.projectKey=pipeline-test \
-              -Dsonar.projectName=pipeline-test \
-              -Dsonar.sources=src/main/java \
-              -Dsonar.java.binaries=target/classes \
-              -Dsonar.login=$SONAR_TOKEN
-          '''
-        }
+  steps {
+    // pull the token you stored in Jenkins Credentials as 'sonar-token'
+    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+      // this wrapper tells Jenkins “this is our Sonar server” so waitForQualityGate will work
+      withSonarQubeEnv('sonar') {
+        sh """
+          sonar-scanner \
+            -Dsonar.projectKey=pipeline-test \
+            -Dsonar.projectName=pipeline-test \
+            -Dsonar.sources=src/main/java \
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.login=${SONAR_TOKEN}
+        """
       }
     }
+  }
+}
+
 
     stage('Quality Gate') {
       steps {
