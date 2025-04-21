@@ -66,7 +66,8 @@ pipeline {
               -Dsonar.projectKey=pipeline-test \
               -Dsonar.projectName=pipeline-test \
               -Dsonar.sources=src/main/java \
-              -Dsonar.java.binaries=target/classes
+              -Dsonar.java.binaries=target/classes \
+              -Dsonar.login=squ_21f860cf7fcaa54daf8022a7e25349f05e8730ea
           '''
         }
       }
