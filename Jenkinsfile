@@ -35,12 +35,9 @@ pipeline {
 
     stage('Smoke Test') {
       steps {
-        // launch the jar in background, wait 3s, then kill it
+        // runs your jar and ensures the output is correct
         sh '''
-          java -jar target/my-app-1.0.0.jar &
-          APP_PID=$!
-          sleep 3
-          kill $APP_PID
+          java -jar target/my-app-1.0.0.jar | grep "Hello, Jenkins!"
         '''
       }
     }
