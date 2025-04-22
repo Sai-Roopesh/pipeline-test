@@ -3,13 +3,16 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
                              http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
+
   <groupId>com.example</groupId>
   <artifactId>my-app</artifactId>
-  <version>1.0.0</version>
+  <version>1.0.1</version>          <!-- bumped -->
+
   <properties>
     <maven.compiler.source>21</maven.compiler.source>
     <maven.compiler.target>21</maven.compiler.target>
   </properties>
+
   <build>
     <plugins>
       <!-- produce an executable jar -->
@@ -27,14 +30,15 @@
       </plugin>
     </plugins>
   </build>
-<distributionManagement>
+
+  <distributionManagement>
     <repository>
-      <id>nexus‑releases</id>
-      <url>http://10.25.157.153:8081/repository/maven‑releases/</url>
+      <id>nexus-releases</id>        <!-- ASCII hyphen -->
+      <url>http://10.25.157.153:8081/repository/maven-releases/</url>
     </repository>
     <snapshotRepository>
-      <id>nexus‑snapshots</id>
-      <url>http://10.25.157.153:8081/repository/maven‑snapshots/</url>
+      <id>nexus-snapshots</id>       <!-- ASCII hyphen -->
+      <url>http://10.25.157.153:8081/repository/maven-snapshots/</url>
     </snapshotRepository>
   </distributionManagement>
 </project>
