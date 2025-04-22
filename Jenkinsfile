@@ -44,7 +44,7 @@ pipeline {
       }
       post {
         success {
-          archiveArtifacts artifacts: 'target/my-app-1.0.0.jar', fingerprint: true
+          archiveArtifacts artifacts: 'target/my-app-1.0.1.jar', fingerprint: true
         }
       }
     }
@@ -52,7 +52,7 @@ pipeline {
     stage('Smoke Test') {
       steps {
         sh '''
-          java -jar target/my-app-1.0.0.jar | grep "Hello, Jenkins!"
+          java -jar target/my-app-1.0.1.jar | grep "Hello, Jenkins!"
         '''
       }
     }
