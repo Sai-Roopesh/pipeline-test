@@ -85,6 +85,7 @@ pipeline {
       steps {
         // long timeout so Trivy has time to pull its DB; only HIGH/CRITICAL to speed it up
         sh '''
+          mkdir -p /var/lib/jenkins/.cache/trivy
           trivy image \
             --cache-dir /var/lib/jenkins/.cache/trivy \
             --scanners vuln \
