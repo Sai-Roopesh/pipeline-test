@@ -74,8 +74,8 @@ pipeline {
     stage('Build & Tag Docker Image') {
       steps {
         script {
-          withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-            sh 'docker build -t thepraduman/boardgame:latest .'
+          docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
+            sh 'docker build -t sanika2003/boardgame:latest .'
           }
         }
       }
@@ -83,7 +83,6 @@ pipeline {
 
     stage('Docker Image Scan') {
       steps {
-        // long timeout so Trivy has time to pull its DB; only HIGH/CRITICAL to speed it up
         sh '''
           mkdir -p /var/lib/jenkins/.cache/trivy
           trivy image \
@@ -93,7 +92,7 @@ pipeline {
             --timeout 15m \
             --format table \
             -o trivy-image-report.html \
-            thepraduman/boardgame:latest
+            sanika2003/boardgame:latest
         '''
       }
     }
@@ -101,7 +100,7 @@ pipeline {
     stage('Push Docker Image') {
       steps {
         script {
-          withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
+          docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
             sh 'docker push sanika2003/boardgame:latest'
           }
         }
