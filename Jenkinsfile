@@ -2,8 +2,8 @@ pipeline {
   agent any
 
   tools {
-    jdk     'Java 21'
-    maven   'Maven 3.8.1'
+    jdk   'Java 21'
+    maven 'Maven 3.8.1'
   }
 
   environment {
@@ -22,25 +22,9 @@ pipeline {
       }
     }
 
-    stage('Debug Info') {
+    stage('Build & Test') {
       steps {
-        sh '''
-          echo "Java: $(java -version 2>&1)"
-          echo "Maven: $(mvn -version 2>&1)"
-          echo "PATH=$PATH"
-        '''
-      }
-    }
-
-    stage('Compile & Test') {
-      steps {
-        sh 'mvn clean verify'
-      }
-    }
-
-    stage('Package') {
-      steps {
-        sh 'mvn package -DskipTests'
+        sh 'mvn clean verify -DskipTests=false'
       }
       post {
         success {
@@ -51,31 +35,25 @@ pipeline {
 
     stage('Smoke Test') {
       steps {
-        sh '''
-          java -jar target/my-app-1.0.1.jar | grep "Hello, Jenkins!"
-        '''
+        sh 'java -jar target/my-app-1.0.1.jar | grep "Hello, Jenkins!"'
       }
     }
 
     stage('SonarQube Analysis') {
-  steps {
-    // pull the token you stored in Jenkins Credentials as 'sonar-token'
-    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-      // this wrapper tells Jenkins “this is our Sonar server” so waitForQualityGate will work
-      withSonarQubeEnv('sonar') {
-        sh """
-          sonar-scanner \
-            -Dsonar.projectKey=pipeline-test \
-            -Dsonar.projectName=pipeline-test \
-            -Dsonar.sources=src/main/java \
-            -Dsonar.java.binaries=target/classes \
-            -Dsonar.login=${SONAR_TOKEN}
-        """
+      steps {
+        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+          withSonarQubeEnv('sonar') {
+            sh """
+              sonar-scanner \
+                -Dsonar.projectKey=pipeline-test \
+                -Dsonar.sources=src/main/java \
+                -Dsonar.java.binaries=target/classes \
+                -Dsonar.login=${SONAR_TOKEN}
+            """
+          }
+        }
       }
     }
-  }
-}
-
 
     stage('Quality Gate') {
       steps {
@@ -87,12 +65,8 @@ pipeline {
 
     stage('Publish to Nexus') {
       steps {
-        withMaven(
-          globalMavenSettingsConfig: 'global-settings',
-          jdk:    'Java 21',
-          maven:  'Maven 3.8.1'
-        ) {
-          sh 'mvn deploy'
+        withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'Java 21', maven: 'Maven 3.8.1') {
+          sh 'mvn deploy -DskipTests'
         }
       }
     }
@@ -100,44 +74,43 @@ pipeline {
     stage('Build & Tag Docker Image') {
       steps {
         script {
-          withDockerRegistry(
-            credentialsId: 'docker-cred',
-            toolName:      'docker'
-          ) {
+          withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
             sh 'docker build -t thepraduman/boardgame:latest .'
           }
         }
       }
     }
 
-    stage('Prep Trivy DB') {
+    stage('Init Trivy DB') {
       steps {
-        sh 'mkdir -p ~/.cache/trivy && trivy --download-db-only'
+        // pulls or updates the DB once; fast if already cached
+        sh '''
+          mkdir -p /var/lib/jenkins/.cache/trivy
+          trivy db update --cache-dir /var/lib/jenkins/.cache/trivy
+        '''
       }
     }
 
-    stage('Docker Image Scan') {
-  steps {
-    sh '''
-      trivy image \
-        --cache-dir /var/lib/jenkins/.cache/trivy \
-        --scanners vuln \
-        --timeout 15m \
-        --format table \
-        -o trivy-image-report.html \
-        thepraduman/boardgame:latest
-    '''
-  }
-}
-
+    stage('Fast Docker Image Scan') {
+      steps {
+        sh '''
+          trivy image \
+            --cache-dir /var/lib/jenkins/.cache/trivy \
+            --skip-db-update \
+            --scanners vuln \
+            --severity HIGH,CRITICAL \
+            --timeout 2m \
+            --format table \
+            -o trivy-image-report.html \
+            thepraduman/boardgame:latest
+        '''
+      }
+    }
 
     stage('Push Docker Image') {
       steps {
         script {
-          withDockerRegistry(
-            credentialsId: 'docker-cred',
-            toolName:      'docker'
-          ) {
+          withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
             sh 'docker push thepraduman/boardgame:latest'
           }
         }
@@ -157,7 +130,7 @@ pipeline {
       }
     }
 
-    stage('Verify the deployment') {
+    stage('Verify Deployment') {
       steps {
         withKubeConfig(
           credentialsId: 'k8s-cred',
