@@ -102,7 +102,7 @@ pipeline {
       steps {
         script {
           withDockerRegistry(credentialsId: 'docker-cred', toolName: 'docker') {
-            sh 'docker push thepraduman/boardgame:latest'
+            sh 'docker push sanika2003/boardgame:latest'
           }
         }
       }
