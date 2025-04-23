@@ -24,7 +24,7 @@ pipeline {
 
     stage('Build & Test') {
       steps {
-        sh 'mvn clean verify -DskipTests=false'
+        sh 'mvn clean verify'
       }
       post {
         success {
@@ -81,25 +81,15 @@ pipeline {
       }
     }
 
-    stage('Init Trivy DB') {
+    stage('Docker Image Scan') {
       steps {
-        // pulls or updates the DB once; fast if already cached
-        sh '''
-          mkdir -p /var/lib/jenkins/.cache/trivy
-          trivy db update --cache-dir /var/lib/jenkins/.cache/trivy
-        '''
-      }
-    }
-
-    stage('Fast Docker Image Scan') {
-      steps {
+        // long timeout so Trivy has time to pull its DB; only HIGH/CRITICAL to speed it up
         sh '''
           trivy image \
             --cache-dir /var/lib/jenkins/.cache/trivy \
-            --skip-db-update \
             --scanners vuln \
             --severity HIGH,CRITICAL \
-            --timeout 2m \
+            --timeout 15m \
             --format table \
             -o trivy-image-report.html \
             thepraduman/boardgame:latest
