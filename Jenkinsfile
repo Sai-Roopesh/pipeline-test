@@ -112,7 +112,7 @@ pipeline {
 
     stage('Docker Image Scan') {
       steps {
-        sh 'trivy --timeout 10m image --scanners vuln --format table -o trivy-image-report.html thepraduman/boardgame:latest'
+        sh 'trivy --timeout 20m image --scanners vuln --format table -o trivy-image-report.html thepraduman/boardgame:latest'
       }
     }
 
