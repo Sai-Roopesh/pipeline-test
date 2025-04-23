@@ -117,11 +117,19 @@ pipeline {
     }
 
     stage('Docker Image Scan') {
-      steps {
-        // only vuln scanner + longer timeout
-        sh 'trivy image --scanners vuln --timeout 10m --format table -o trivy-image-report.html thepraduman/boardgame:latest'
-      }
-    }
+  steps {
+    sh '''
+      trivy image \
+        --cache-dir /var/lib/jenkins/.cache/trivy \
+        --scanners vuln \
+        --timeout 15m \
+        --format table \
+        -o trivy-image-report.html \
+        thepraduman/boardgame:latest
+    '''
+  }
+}
+
 
     stage('Push Docker Image') {
       steps {
