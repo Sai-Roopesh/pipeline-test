@@ -110,9 +110,16 @@ pipeline {
       }
     }
 
+    stage('Prep Trivy DB') {
+      steps {
+        sh 'mkdir -p ~/.cache/trivy && trivy --download-db-only'
+      }
+    }
+
     stage('Docker Image Scan') {
       steps {
-        sh 'trivy --timeout 20m image --scanners vuln --format table -o trivy-image-report.html thepraduman/boardgame:latest'
+        // only vuln scanner + longer timeout
+        sh 'trivy image --scanners vuln --timeout 10m --format table -o trivy-image-report.html thepraduman/boardgame:latest'
       }
     }
 
