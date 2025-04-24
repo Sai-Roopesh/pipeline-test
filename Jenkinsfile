@@ -14,6 +14,10 @@ pipeline {
     PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
   }
 
+  triggers {
+    githubPush()
+  }
+
   stages {
     stage('Checkout') {
       steps {
