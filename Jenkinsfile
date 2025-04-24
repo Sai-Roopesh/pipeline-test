@@ -111,7 +111,6 @@ pipeline {
       steps {
         withKubeConfig(
           credentialsId: 'k8s-cred',
-          serverUrl:     'https://10.25.157.142:6443',
           namespace:     'webapps',
           clusterName:   'kubernetes'
         ) {
@@ -124,7 +123,6 @@ pipeline {
       steps {
         withKubeConfig(
           credentialsId: 'k8s-cred',
-          serverUrl:     'https://127.0.0.1:6443',
           namespace:     'webapps',
           clusterName:   'kubernetes'
         ) {
