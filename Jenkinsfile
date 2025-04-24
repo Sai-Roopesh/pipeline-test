@@ -109,11 +109,7 @@ pipeline {
 
     stage('Deploy to k8s') {
       steps {
-        withKubeConfig(
-          credentialsId: 'k8s-cred',
-          namespace:     'ci-cd',
-          clusterName:   'default'
-        ) {
+        withKubeConfig(credentialsId: 'k8-cred1') {
           sh 'kubectl apply -f k8s-manifest'
         }
       }
@@ -121,13 +117,9 @@ pipeline {
 
     stage('Verify Deployment') {
       steps {
-        withKubeConfig(
-          credentialsId: 'k8s-cred',
-          namespace:     'ci-cd',
-          clusterName:   'default'
-        ) {
-          sh 'kubectl get pods -n ci-cd'
-          sh 'kubectl get svc -n ci-cd'
+        withKubeConfig(credentialsId: 'k8-cred1') {
+          sh 'kubectl get pods -n webapps'
+          sh 'kubectl get svc -n webapps'
         }
       }
     }
