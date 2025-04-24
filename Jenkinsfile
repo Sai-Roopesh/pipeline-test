@@ -134,5 +134,22 @@ pipeline {
     always {
       junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
     }
+    success {
+      script {
+        def authorEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
+        mail to: authorEmail,
+             subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+             body: """\
+Hello,
+
+Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #${env.BUILD_NUMBER}).
+
+You can view it here: ${env.BUILD_URL}
+
+Best,
+Jenkins CI/CD
+"""
+      }
+    }
   }
 }
