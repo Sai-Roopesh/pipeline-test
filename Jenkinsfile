@@ -113,7 +113,7 @@ pipeline {
         withKubeConfig(
           credentialsId: 'k8s-config'
         ) {
-          sh 'kubectl apply -f k8s-manifest'
+          sh 'kubectl apply -f /var/lib/jenkins/k8s-manifest'
         }
       }
     }
