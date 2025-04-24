@@ -112,7 +112,7 @@ pipeline {
         withKubeConfig(
           credentialsId: 'k8s-cred',
           namespace:     'webapps',
-          clusterName:   'kubernetes'
+          clusterName:   'default'
         ) {
           sh 'kubectl apply -f k8s-manifest'
         }
@@ -124,7 +124,7 @@ pipeline {
         withKubeConfig(
           credentialsId: 'k8s-cred',
           namespace:     'webapps',
-          clusterName:   'kubernetes'
+          clusterName:   'default'
         ) {
           sh 'kubectl get pods -n webapps'
           sh 'kubectl get svc -n webapps'
