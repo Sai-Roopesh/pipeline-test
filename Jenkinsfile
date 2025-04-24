@@ -111,7 +111,7 @@ pipeline {
       steps {
         withKubeConfig(
           credentialsId: 'k8s-cred',
-          namespace:     'webapps',
+          namespace:     'ci-cd',
           clusterName:   'default'
         ) {
           sh 'kubectl apply -f k8s-manifest'
@@ -123,11 +123,11 @@ pipeline {
       steps {
         withKubeConfig(
           credentialsId: 'k8s-cred',
-          namespace:     'webapps',
+          namespace:     'ci-cd',
           clusterName:   'default'
         ) {
-          sh 'kubectl get pods -n webapps'
-          sh 'kubectl get svc -n webapps'
+          sh 'kubectl get pods -n ci-cd'
+          sh 'kubectl get svc -n ci-cd'
         }
       }
     }
