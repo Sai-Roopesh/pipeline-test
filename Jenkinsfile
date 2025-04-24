@@ -113,7 +113,7 @@ pipeline {
         withKubeConfig(
           credentialsId: 'k8s-config'
         ) {
-          sh 'sudo kubectl apply -f k8s-manifest'
+          sh 'kubectl apply -f k8s-manifest'
         }
       }
     }
@@ -123,8 +123,8 @@ pipeline {
         withKubeConfig(
           credentialsId: 'k8s-config'
         ) {
-          sh 'sudo kubectl get pods -n ci-cd'
-          sh 'sudo kubectl get svc -n ci-cd'
+          sh 'kubectl get pods -n ci-cd'
+          sh 'kubectl get svc -n ci-cd'
         }
       }
     }
