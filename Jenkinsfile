@@ -91,9 +91,9 @@ pipeline {
       }
     }
 
-    stage('Trivy Image Scan') {
+   stage('Trivy Image Scan') {
     steps {
-        // 1. Warm the cache once per day (fast if already warm)
+        // 1. Update the vulnerability DB (optional – you can drop this if you like)
         sh """
             mkdir -p "${TRIVY_CACHE_DIR}"
             trivy image \
@@ -102,31 +102,30 @@ pipeline {
               --quiet
         """
 
-        // 2. Scan image – vulnerability scanner only, skip Java DB
-        sh '''
-            trivy image 
-              --cache-dir "${TRIVY_CACHE_DIR}" 
-              --scanners vuln 
-              --severity HIGH,CRITICAL 
-              --format template 
-              --template "@contrib/html.tpl" 
-              --timeout 15m 
-              --exit-code 0 
-              -o trivy-image-report.html 
+        // 2. Scan the freshly-built image and turn the results into HTML
+        sh """
+            trivy image \
+              --cache-dir "${TRIVY_CACHE_DIR}" \
+              --scanners vuln \
+              --severity HIGH,CRITICAL \
+              --format template \
+              --template "@${TRIVY_TEMPLATE}" \
+              --timeout 15m \
+              --exit-code 0 \
+              -o trivy-image-report.html \
               sanika2003/boardgame:latest
-        '''
+        """
     }
     post {
         always {
             archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
-            publishHTML(target: [
-                reportDir:        '.',
-                reportFiles:      'trivy-image-report.html',
-                reportName:       'Trivy Image Scan',
-                allowMissing:     false,
-                alwaysLinkToLastBuild: true,
-                keepAll:          true
-            ])
+            publishHTML target: [
+                reportDir: '.',
+                reportFiles: 'trivy-image-report.html',
+                reportName: 'Trivy Image Scan',
+                keepAll: true,
+                alwaysLinkToLastBuild: true
+            ]
         }
     }
 }
