@@ -12,8 +12,8 @@ pipeline {
     M2_HOME      = tool 'Maven 3.8.1'
     SCANNER_HOME = tool 'sonar-scanner'
     PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-    TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache"
     TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
+    TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
   }
 
   triggers {
@@ -90,15 +90,25 @@ pipeline {
 
     stage('Trivy Image Scan') {
     steps {
+        // 1. Warm the cache once per day (fast if already warm)
         sh """
             mkdir -p "${TRIVY_CACHE_DIR}"
             trivy image \
+              --download-db-only \
               --cache-dir "${TRIVY_CACHE_DIR}" \
-              --severity HIGH,CRITICAL \
-              --timeout 15m \
+              --quiet
+        """
+
+        // 2. Scan image – vulnerability scanner only, skip Java DB
+        sh """
+            trivy image \
+              --cache-dir "${TRIVY_CACHE_DIR}" \
               --scanners vuln \
+              --skip-java-db-update \
+              --severity HIGH,CRITICAL \
               --format template \
               --template "@${TRIVY_TEMPLATE}" \
+              --timeout 15m \
               --exit-code 0 \
               -o trivy-image-report.html \
               sanika2003/boardgame:latest
