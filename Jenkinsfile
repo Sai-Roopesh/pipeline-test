@@ -14,6 +14,8 @@ pipeline {
     PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
     TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
     TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
+    DOCKER_CONFIG = "${WORKSPACE}/.docker"
+
   }
 
   triggers {
@@ -80,6 +82,7 @@ pipeline {
 
     stage('Build & Tag Docker Image') {
       steps {
+        sh 'mkdir -p "$DOCKER_CONFIG"'
         script {
           docker.withRegistry('https://index.docker.io/v1/', 'docker-cred') {
             sh 'docker build -t sanika2003/boardgame:latest .'
@@ -104,7 +107,6 @@ pipeline {
             trivy image \
               --cache-dir "${TRIVY_CACHE_DIR}" \
               --scanners vuln \
-              --skip-java-db-update \
               --severity HIGH,CRITICAL \
               --format template \
               --template "@${TRIVY_TEMPLATE}" \
