@@ -109,7 +109,7 @@ pipeline {
               --scanners vuln \
               --severity HIGH,CRITICAL \
               --format template \
-              --template "@${TRIVY_TEMPLATE}" \
+              --template "@contrib/html.tpl" \ 
               --timeout 15m \
               --exit-code 0 \
               -o trivy-image-report.html \
