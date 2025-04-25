@@ -115,53 +115,59 @@ pipeline {
 
         /* ---------- Trivy scan on the freshly-pushed image ---------- */
         stage('Trivy Image Scan') {
-            steps {
-                /* 1) assure fancy template exists */
-                sh """
-                    if [ ! -f "${TRIVY_TEMPLATE}" ]; then
-                      sudo mkdir -p \$(dirname "${TRIVY_TEMPLATE}")
-                      sudo curl -sSL \
-                        https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
-                        -o "${TRIVY_TEMPLATE}"
-                    fi
-                """
+    steps {
+        /* grab the Docker username so we know which image to scan */
+        withCredentials([usernamePassword(credentialsId: 'docker-cred',
+                                          usernameVariable: 'DOCKER_USER',
+                                          passwordVariable: 'IGNORED')]) {
 
-                /* 2) keep DB warm */
-                sh """
-                    mkdir -p "${TRIVY_CACHE_DIR}"
-                    trivy image \
-                      --download-db-only \
-                      --cache-dir "${TRIVY_CACHE_DIR}" \
-                      --quiet
-                """
+            /* 1) make sure the fancy HTML template exists */
+            sh """
+                if [ ! -f "${TRIVY_TEMPLATE}" ]; then
+                  sudo mkdir -p \$(dirname "${TRIVY_TEMPLATE}")
+                  sudo curl -sSL \
+                    https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
+                    -o "${TRIVY_TEMPLATE}"
+                fi
+            """
 
-                /* 3) real scan → HTML */
-                sh """
-                    trivy image \\
-                      --cache-dir "${TRIVY_CACHE_DIR}" \\
-                      --scanners vuln \\
-                      --severity HIGH,CRITICAL \\
-                      --format template \\
-                      --template "@${TRIVY_TEMPLATE}" \\
-                      --timeout 15m \\
-                      --exit-code 0 \\
-                      -o trivy-image-report.html \\
-                      "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                """
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir: '.',
-                        reportFiles: 'trivy-image-report.html',
-                        reportName: 'Trivy Image Scan',
-                        keepAll: true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
-            }
+            /* 2) warm the DB */
+            sh """
+                mkdir -p "${TRIVY_CACHE_DIR}"
+                trivy image \
+                  --download-db-only \
+                  --cache-dir "${TRIVY_CACHE_DIR}" \
+                  --quiet
+            """
+
+            /* 3) real scan → HTML */
+            sh """
+                trivy image \\
+                  --cache-dir "${TRIVY_CACHE_DIR}" \\
+                  --scanners vuln \\
+                  --severity HIGH,CRITICAL \\
+                  --format template \\
+                  --template "@${TRIVY_TEMPLATE}" \\
+                  --timeout 15m \\
+                  --exit-code 0 \\
+                  -o trivy-image-report.html \\
+                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+            """
+        }   /* withCredentials */
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
+            publishHTML target: [
+                reportDir: '.',
+                reportFiles: 'trivy-image-report.html',
+                reportName: 'Trivy Image Scan',
+                keepAll: true,
+                alwaysLinkToLastBuild: true
+            ]
         }
+    }
+}
 
         /* ---------- deploy ---------- */
         stage('Deploy to k8s') {
