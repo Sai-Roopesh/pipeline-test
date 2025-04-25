@@ -96,6 +96,7 @@ pipeline {
               --cache-dir "${TRIVY_CACHE_DIR}" \
               --severity HIGH,CRITICAL \
               --timeout 15m \
+              --scanners vuln \
               --format template \
               --template "@${TRIVY_TEMPLATE}" \
               --exit-code 0 \
