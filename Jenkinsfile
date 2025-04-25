@@ -93,14 +93,14 @@ pipeline {
         sh """
             mkdir -p "${TRIVY_CACHE_DIR}"
             trivy image \
-                --cache-dir "${TRIVY_CACHE_DIR}" \
-                --severity HIGH,CRITICAL \
-                --timeout 1m \
-                --format template \
-                --template "@${TRIVY_TEMPLATE}" \
-                --exit-code 0 \                 # change to 1 if you want the build to fail on vulns
-                -o trivy-image-report.html \
-                sanika2003/boardgame:latest
+              --cache-dir "${TRIVY_CACHE_DIR}" \
+              --severity HIGH,CRITICAL \
+              --timeout 1m \
+              --format template \
+              --template "@${TRIVY_TEMPLATE}" \
+              --exit-code 0 \
+              -o trivy-image-report.html \
+              sanika2003/boardgame:latest
         """
     }
     post {
