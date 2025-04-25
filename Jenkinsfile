@@ -103,7 +103,7 @@ pipeline {
         """
 
         // 2. Scan image – vulnerability scanner only, skip Java DB
-        sh """
+        sh '''
             trivy image \
               --cache-dir "${TRIVY_CACHE_DIR}" \
               --scanners vuln \
@@ -114,7 +114,7 @@ pipeline {
               --exit-code 0 \
               -o trivy-image-report.html \
               sanika2003/boardgame:latest
-        """
+        '''
     }
     post {
         always {
