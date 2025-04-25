@@ -104,15 +104,15 @@ pipeline {
 
         // 2. Scan image – vulnerability scanner only, skip Java DB
         sh '''
-            trivy image \
-              --cache-dir "${TRIVY_CACHE_DIR}" \
-              --scanners vuln \
-              --severity HIGH,CRITICAL \
-              --format template \
-              --template "@contrib/html.tpl" \ 
-              --timeout 15m \
-              --exit-code 0 \
-              -o trivy-image-report.html \
+            trivy image 
+              --cache-dir "${TRIVY_CACHE_DIR}" 
+              --scanners vuln 
+              --severity HIGH,CRITICAL 
+              --format template 
+              --template "@contrib/html.tpl" 
+              --timeout 15m 
+              --exit-code 0 
+              -o trivy-image-report.html 
               sanika2003/boardgame:latest
         '''
     }
