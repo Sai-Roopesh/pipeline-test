@@ -95,7 +95,7 @@ pipeline {
             trivy image \
               --cache-dir "${TRIVY_CACHE_DIR}" \
               --severity HIGH,CRITICAL \
-              --timeout 1m \
+              --timeout 15m \
               --format template \
               --template "@${TRIVY_TEMPLATE}" \
               --exit-code 0 \
