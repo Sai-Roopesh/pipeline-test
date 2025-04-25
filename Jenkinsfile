@@ -12,6 +12,8 @@ pipeline {
     M2_HOME      = tool 'Maven 3.8.1'
     SCANNER_HOME = tool 'sonar-scanner'
     PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
+    TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache"
+    TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
   }
 
   triggers {
@@ -86,21 +88,36 @@ pipeline {
       }
     }
 
-    stage('Docker Image Scan') {
-      steps {
-        sh '''
-          mkdir -p /var/lib/jenkins/.cache/trivy
-          trivy image \
-            --cache-dir /var/lib/jenkins/.cache/trivy \
-            --scanners vuln \
-            --severity HIGH,CRITICAL \
-            --timeout 15m \
-            --format table \
-            -o trivy-image-report.html \
-            sanika2003/boardgame:latest
-        '''
-      }
+    stage('Trivy Image Scan') {
+    steps {
+        sh """
+            mkdir -p "${TRIVY_CACHE_DIR}"
+            trivy image \
+                --cache-dir "${TRIVY_CACHE_DIR}" \
+                --severity HIGH,CRITICAL \
+                --timeout 1m \
+                --format template \
+                --template "@${TRIVY_TEMPLATE}" \
+                --exit-code 0 \                 # change to 1 if you want the build to fail on vulns
+                -o trivy-image-report.html \
+                sanika2003/boardgame:latest
+        """
     }
+    post {
+        always {
+            archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
+            publishHTML(target: [
+                reportDir:        '.',
+                reportFiles:      'trivy-image-report.html',
+                reportName:       'Trivy Image Scan',
+                allowMissing:     false,
+                alwaysLinkToLastBuild: true,
+                keepAll:          true
+            ])
+        }
+    }
+}
+
 
     stage('Push Docker Image') {
       steps {
