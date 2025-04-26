@@ -11,7 +11,7 @@ public class App {
     public static void main(String[] args) throws Exception {
 
         // listen on 0.0.0.0:8080 so it is reachable inside the pod
-        HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
+        HttpServer server = HttpServer.create(new InetSocketAddress(15000), 0);
 
         server.createContext("/", exchange -> {
             String body = "Hello, Jenkins!";
@@ -22,6 +22,6 @@ public class App {
         });
 
         server.start();                      //  <-- keeps running
-        System.out.println("Server started at http://0.0.0.0:8080");
+        System.out.println("Server started at http://0.0.0.0:15000");
     }
 }
