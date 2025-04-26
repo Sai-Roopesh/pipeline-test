@@ -20,7 +20,7 @@
 
   <build>
     <!-- 1. name the final file ‘app.jar’ -->
-    <finalName>app</finalName>
+ 
 
     <plugins>
       <!-- 2. embed Main-Class so `java -jar` works -->
