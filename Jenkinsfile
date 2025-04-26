@@ -21,7 +21,6 @@ pipeline {
     triggers { githubPush() }
 
     stages {
-        /* ───────── checkout & build ───────── */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -32,46 +31,47 @@ pipeline {
 
         stage('Build & Test') {
             steps { sh 'mvn clean verify' }
-            post { success { archiveArtifacts artifacts: 'target/*.jar', fingerprint: true } }
+            post {
+                success {
+                    archiveArtifacts artifacts: 'target/my-app-1.0.1.jar', fingerprint: true
+                }
+            }
         }
 
-        /* ───────── bullet-proof Smoke Test ───────── */
         stage('Smoke Test') {
             steps {
                 sh '''
                   set -eu
                   PORT=8080
-                  JAR=target/app.jar
+                  JAR=target/my-app-1.0.1.jar
 
-                  # kill any stray process from an older build
-                  if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1 ; then
-                      echo "Port $PORT is busy – killing old process"
+                  # kill any stray process
+                  if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
+                      echo "Port $PORT busy – killing old process"
                       fuser -k ${PORT}/tcp || true
                       sleep 1
                   fi
 
-                  # launch the server in background
+                  # start server
                   java -jar "$JAR" &
                   PID=$!
                   trap "kill $PID" EXIT
 
-                  # wait (max 15 s) until it answers
+                  # wait up to 15 s
                   for i in {1..15}; do
-                      if curl -sf http://localhost:${PORT} >/dev/null ; then break; fi
+                      if curl -sf "http://localhost:$PORT" >/dev/null; then break; fi
                       sleep 1
                   done
 
-                  # assertion
-                  curl -sf http://localhost:${PORT} | grep "Hello, Jenkins!"
+                  # verify response
+                  curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
                 '''
             }
         }
 
-        /* ───────── Sonar & Quality Gate (skipped) ───────── */
-        stage('SonarQube Analysis') { when { expression { false } }  steps { echo 'Sonar skipped.' } }
-        stage('Quality Gate')       { when { expression { false } }  steps { echo 'Gate skipped.' } }
+        stage('SonarQube Analysis') { when { expression { false } } steps { echo 'Sonar skipped.' } }
+        stage('Quality Gate')       { when { expression { false } } steps { echo 'Gate skipped.' } }
 
-        /* ───────── publish to Nexus ───────── */
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -82,7 +82,6 @@ pipeline {
             }
         }
 
-        /* ───────── Docker build & push ───────── */
         stage('Build & Push Docker image') {
             environment { DOCKER_CONFIG = "${WORKSPACE}/.docker" }
             steps {
@@ -105,10 +104,8 @@ pipeline {
             post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
         }
 
-        /* ───────── Trivy scan (still disabled) ───────── */
         stage('Trivy Image Scan') { when { expression { false } } steps { echo 'Trivy skipped.' } }
 
-        /* ───────── render → deploy → verify ───────── */
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-cred',
@@ -116,7 +113,8 @@ pipeline {
                                                   passwordVariable: 'IGNORED')]) {
                     sh '''
                       export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
+                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
+                               > rendered-deployment.yaml
                     '''
                 }
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
