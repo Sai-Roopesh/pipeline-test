@@ -41,7 +41,7 @@ pipeline {
         stage('Smoke Test') {
     steps {
         sh '''
-          java -jar target/app.jar &
+          java -jar target/my-app-1.0.1.jar &
           PID=$!
           sleep 2                      # give the server time to start
           curl -sf http://localhost:8080 | grep "Hello, Jenkins!"
