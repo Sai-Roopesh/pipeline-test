@@ -1,17 +1,16 @@
+// Jenkinsfile – CI/CD pipeline (Sonar & Trivy still disabled)
 pipeline {
     agent any
 
-    /* ───── toolchains ───── */
     tools {
         jdk   'Java 21'
         maven 'Maven 3.8.1'
     }
 
-    /* ───── global env ───── */
     environment {
         JAVA_HOME    = tool 'Java 21'
         M2_HOME      = tool 'Maven 3.8.1'
-        SCANNER_HOME = tool 'sonar-scanner'      // harmless even while Sonar is skipped
+        SCANNER_HOME = tool 'sonar-scanner'           // harmless while skipped
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
 
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
@@ -22,7 +21,7 @@ pipeline {
     triggers { githubPush() }
 
     stages {
-        /* ───────── source, build, tests ───────── */
+        /* ───────── checkout & build ───────── */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -33,36 +32,46 @@ pipeline {
 
         stage('Build & Test') {
             steps { sh 'mvn clean verify' }
-            post {
-                success { archiveArtifacts artifacts: 'target/my-app-1.0.1.jar', fingerprint: true }
+            post { success { archiveArtifacts artifacts: 'target/app.jar', fingerprint: true } }
+        }
+
+        /* ───────── bullet-proof Smoke Test ───────── */
+        stage('Smoke Test') {
+            steps {
+                sh '''
+                  set -eu
+                  PORT=8080
+                  JAR=target/app.jar
+
+                  # kill any stray process from an older build
+                  if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+                      echo "Port $PORT is busy – killing old process"
+                      fuser -k ${PORT}/tcp || true
+                      sleep 1
+                  fi
+
+                  # launch the server in background
+                  java -jar "$JAR" &
+                  PID=$!
+                  trap "kill $PID" EXIT
+
+                  # wait (max 15 s) until it answers
+                  for i in {1..15}; do
+                      if curl -sf http://localhost:${PORT} >/dev/null ; then break; fi
+                      sleep 1
+                  done
+
+                  # assertion
+                  curl -sf http://localhost:${PORT} | grep "Hello, Jenkins!"
+                '''
             }
         }
 
-        stage('Smoke Test') {
-    steps {
-        sh '''
-          java -jar target/my-app-1.0.1.jar &
-          PID=$!
-          sleep 2                      # give the server time to start
-          curl -sf http://localhost:8080 | grep "Hello, Jenkins!"
-          kill $PID
-        '''
-    }
-}
+        /* ───────── Sonar & Quality Gate (skipped) ───────── */
+        stage('SonarQube Analysis') { when { expression { false } }  steps { echo 'Sonar skipped.' } }
+        stage('Quality Gate')       { when { expression { false } }  steps { echo 'Gate skipped.' } }
 
-
-        /* ───────── SonarQube skipped for now ───────── */
-        stage('SonarQube Analysis') {
-            when { expression { return false } }
-            steps { echo 'SonarQube analysis skipped.' }
-        }
-
-        stage('Quality Gate') {
-            when { expression { return false } }
-            steps { echo 'Quality-Gate check skipped.' }
-        }
-
-        /* ───────── publish to Nexus (unchanged) ───────── */
+        /* ───────── publish to Nexus ───────── */
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -96,11 +105,8 @@ pipeline {
             post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
         }
 
-        /* ───────── Trivy skipped for now ───────── */
-        stage('Trivy Image Scan') {
-            when { expression { return false } }
-            steps { echo 'Trivy scan skipped.' }
-        }
+        /* ───────── Trivy scan (still disabled) ───────── */
+        stage('Trivy Image Scan') { when { expression { false } } steps { echo 'Trivy skipped.' } }
 
         /* ───────── render → deploy → verify ───────── */
         stage('Render manifest') {
@@ -110,8 +116,7 @@ pipeline {
                                                   passwordVariable: 'IGNORED')]) {
                     sh '''
                       export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                               > rendered-deployment.yaml
+                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
                     '''
                 }
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
@@ -119,42 +124,34 @@ pipeline {
         }
 
         stage('Deploy to k8s') {
-    steps {
-        withKubeConfig(credentialsId: 'k8s-config') {
-            sh '''
-              set -e
-              kubectl apply -f rendered-deployment.yaml --record
-              if ! kubectl rollout status deployment/nginx-deployment --timeout=120s ; then
-                echo "---- rollout failed, dumping pod status ----"
-                kubectl get pods -l app=nginx -o wide
-                kubectl describe pods -l app=nginx
-                exit 1
-              fi
-            '''
+            steps {
+                withKubeConfig(credentialsId: 'k8s-config') {
+                    sh '''
+                      set -e
+                      kubectl apply -f rendered-deployment.yaml --record
+                      kubectl rollout status deployment/nginx-deployment --timeout=120s
+                    '''
+                }
+            }
         }
-    }
-}
 
         stage('Verify deployment') {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                      echo "Pod  ↔  Image  ↔  Ready?"
+                      echo "Pods / Image / Ready"
                       kubectl get pods -l app=nginx \
                         -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready' \
                         --no-headers
-
-                      kubectl get svc nginx-service -o wide
+                      kubectl get svc nginx-service -o wide || true
                     '''
                 }
             }
         }
     }
 
-    /* ───────── post-pipeline ───────── */
     post {
         always  { junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true }
-
         success {
             script {
                 def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
