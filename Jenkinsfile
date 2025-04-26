@@ -176,35 +176,30 @@ NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatu
     }
 
     post {
-    always {
-        junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
-    }
-    success {
-        script {
-            def authorEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
-            def authorName = sh(script: "git --no-pager show -s --format='%an'", returnStdout: true).trim()
-            def githubUsername = sh(script: "git --no-pager show -s --format='%an'", returnStdout: true).trim().toLowerCase()
+        always  {
+            junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
+        }
 
-            // Mail fallback (you already had this)
-            mail to: authorEmail,
-                 subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                 body: "Your commit deployed successfully. Details: ${env.BUILD_URL}"
-
-            // Create a GitHub Issue mentioning the pusher (creates a notification)
+        success {
             withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-                sh """
-                    curl -s -X POST -H "Authorization: token $GITHUB_TOKEN" \
+                script {
+                    // Capture GitHub username from Git log
+                    def githubEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
+                    def githubUser = githubEmail.split('@')[0].replaceAll("\\.", "")
+
+                    def repoOwner = 'Sai-Roopesh'      // <-- Update if needed
+                    def repoName  = 'pipeline-test'     // <-- Update if needed
+
+                    // Post a GitHub comment mentioning the user
+                    sh """
+                      curl -X POST \
+                        -H "Authorization: token ${GITHUB_TOKEN}" \
                         -H "Accept: application/vnd.github.v3+json" \
-                        https://api.github.com/repos/Sai-Roopesh/pipeline-test/issues \
-                        -d '{
-                            "title": "🚀 Deployment Success: Build #${BUILD_NUMBER}",
-                            "body": "@${githubUsername} Your application has been deployed successfully! 🎉\\n\\nYou can view it here: ${BUILD_URL}",
-                            "labels": ["deployment", "notification"]
-                        }'
-                """
+                        https://api.github.com/repos/${repoOwner}/${repoName}/issues/1/comments \
+                        -d '{"body": "@${githubUser} ✅ Your application has been deployed! View here: ${BUILD_URL}"}'
+                    """
+                }
             }
         }
     }
 }
-}
-
