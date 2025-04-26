@@ -1,9 +1,10 @@
-# Dockerfile – build a tiny Java 21 HTTP service
+# Dockerfile – package the 1.0.1 jar
 FROM eclipse-temurin:21-jre-jammy
 
 WORKDIR /app
 
-COPY target/app.jar app.jar
+# use the exact jar name from the build
+COPY target/my-app-1.0.1.jar my-app-1.0.1.jar
 
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-jar", "my-app-1.0.1.jar"]
