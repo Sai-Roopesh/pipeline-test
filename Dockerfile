@@ -1,14 +1,8 @@
-# Use a lightweight Java 21 runtime image
+# Dockerfile ── same directory as pom.xml
 FROM eclipse-temurin:21-jre-jammy
 
-# Create a working directory
 WORKDIR /app
+COPY target/app.jar app.jar            # ← exact file name
 
-# Copy the built jar (assumes jenkins/Maven output to target/*.jar)
-COPY target/*.jar app.jar
-
-# (Optional) expose a port if your app listens on one
-# EXPOSE 8080
-
-# Run the jar
+EXPOSE 8080                            # HTTP server in App.java
 ENTRYPOINT ["java", "-jar", "app.jar"]
