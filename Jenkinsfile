@@ -39,8 +39,17 @@ pipeline {
         }
 
         stage('Smoke Test') {
-            steps { sh 'java -jar target/my-app-1.0.1.jar | grep "Hello, Jenkins!"' }
-        }
+    steps {
+        sh '''
+          java -jar target/app.jar &
+          PID=$!
+          sleep 2                      # give the server time to start
+          curl -sf http://localhost:8080 | grep "Hello, Jenkins!"
+          kill $PID
+        '''
+    }
+}
+
 
         /* ───────── SonarQube skipped for now ───────── */
         stage('SonarQube Analysis') {
