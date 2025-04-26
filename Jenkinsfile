@@ -38,31 +38,38 @@ pipeline {
         }
 
         stage('Smoke Test') {
-            steps {
-                sh '''
-                  set -eu
-                  PORT=15000
-                  JAR=target/my-app-1.0.1.jar
+  steps {
+    sh '''
+      set -eu
+      PORT=15000
+      JAR=target/my-app-1.0.1.jar
 
-                  if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
-                      echo "Port $PORT busy – killing old process"
-                      fuser -k ${PORT}/tcp || true
-                      sleep 1
-                  fi
+      # 1) kill any stray process on PORT
+      if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+        echo "Port $PORT busy – killing old process"
+        fuser -k ${PORT}/tcp || true
+        sleep 1
+      fi
 
-                  java -jar "$JAR" &
-                  PID=$!
-                  trap "kill $PID" EXIT
+      # 2) launch the server with PORT in its env
+      PORT=$PORT java -jar "$JAR" &
+      PID=$!
+      trap "kill $PID" EXIT
 
-                  for i in {1..15}; do
-                      if curl -sf "http://localhost:$PORT" >/dev/null; then break; fi
-                      sleep 1
-                  done
+      # 3) wait (max 15s) until it answers
+      for i in {1..15}; do
+        if curl -sf "http://localhost:$PORT" >/dev/null; then
+          break
+        fi
+        sleep 1
+      done
 
-                  curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
-                '''
-            }
-        }
+      # 4) final assertion
+      curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
+    '''
+  }
+}
+
 
         stage('SonarQube Analysis') {
             when {
