@@ -41,7 +41,7 @@ pipeline {
             steps {
                 sh '''
                   set -eu
-                  PORT=8080
+                  PORT=15000
                   JAR=target/my-app-1.0.1.jar
 
                   if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
