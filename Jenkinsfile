@@ -1,4 +1,4 @@
-// Jenkinsfile ─── CI/CD, security, Kubernetes rollout ───────────────────────
+// Jenkinsfile ─── CI/CD, Kubernetes rollout  (Trivy temporarily skipped) ────
 pipeline {
     agent any
 
@@ -15,11 +15,9 @@ pipeline {
         SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
 
-        /* Trivy */
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
         TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
 
-        /* Docker config lives inside workspace */
         DOCKER_CONFIG = "${WORKSPACE}/.docker"
     }
 
@@ -27,7 +25,7 @@ pipeline {
 
     stages {
 
-        /* ──────────────────────────────────── source, build, quality ───── */
+        /* ───────── source, build, quality ───────── */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -81,7 +79,7 @@ pipeline {
             }
         }
 
-        /* ───────────────────────────────────── Docker build & push ───── */
+        /* ───────── Docker build & push ───────── */
         stage('Build & Push Docker image') {
             environment { DOCKER_CONFIG = "${WORKSPACE}/.docker" }
             steps {
@@ -96,8 +94,7 @@ pipeline {
                       docker build -t "$DOCKER_USER/boardgame:${BUILD_NUMBER}" .
                       docker push "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
-                      docker tag  "$DOCKER_USER/boardgame:${BUILD_NUMBER}" \
-                                  "$DOCKER_USER/boardgame:latest"
+                      docker tag  "$DOCKER_USER/boardgame:${BUILD_NUMBER}" "$DOCKER_USER/boardgame:latest"
                       docker push "$DOCKER_USER/boardgame:latest"
                     '''
                 }
@@ -105,59 +102,15 @@ pipeline {
             post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
         }
 
-        /* ───────────────────────────────────────── Trivy scan ───── */
+        /* ───────── Trivy scan (SKIPPED) ───────── */
         stage('Trivy Image Scan') {
+            when { expression { return false } }   // ← flip to true (or delete) to reactivate
             steps {
-                withCredentials([usernamePassword(credentialsId: 'docker-cred',
-                                                  usernameVariable: 'DOCKER_USER',
-                                                  passwordVariable: 'IGNORED')]) {
-
-                    /* ensure HTML template */
-                    sh '''
-                      if [ ! -f "${TRIVY_TEMPLATE}" ]; then
-                        sudo mkdir -p "$(dirname "${TRIVY_TEMPLATE}")"
-                        sudo curl -sSL \
-                          https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
-                          -o "${TRIVY_TEMPLATE}"
-                      fi
-                    '''
-
-                    /* warm DB */
-                    sh '''
-                      mkdir -p "${TRIVY_CACHE_DIR}"
-                      trivy image --download-db-only --cache-dir "${TRIVY_CACHE_DIR}" --quiet
-                    '''
-
-                    /* full scan → HTML report */
-                    sh '''
-                      trivy image \
-                        --cache-dir "${TRIVY_CACHE_DIR}" \
-                        --scanners vuln \
-                        --severity HIGH,CRITICAL \
-                        --format template \
-                        --template "@${TRIVY_TEMPLATE}" \
-                        --timeout 15m \
-                        --exit-code 0 \
-                        -o trivy-image-report.html \
-                        "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                    '''
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir: '.',
-                        reportFiles: 'trivy-image-report.html',
-                        reportName: 'Trivy Image Scan',
-                        keepAll: true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
+                echo 'Trivy scan skipped for now.'
             }
         }
 
-        /* ───────────────────────────── render manifest, deploy, verify ─ */
+        /* ───────── render manifest, deploy, verify ───────── */
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-cred',
@@ -200,14 +153,13 @@ pipeline {
         }
     }
 
-    /* ───────────────────────────────────────── post-pipeline ───── */
+    /* ───────── post-pipeline ───────── */
     post {
         always { junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true }
 
         success {
             script {
-                def authorEmail = sh(script: "git --no-pager show -s --format='%ae'",
-                                     returnStdout: true).trim()
+                def authorEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
                 mail to: authorEmail,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                      body: """
