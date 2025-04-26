@@ -157,18 +157,22 @@ pipeline {
         }
 
         stage('Verify deployment') {
-            steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                      echo "Pods / Image / Ready"
-                      kubectl get pods -l app=nginx \
-                        -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready' \
-                        --no-headers
-                      kubectl get svc nginx-service -o wide || true
-                    '''
-                }
-            }
-        }
+  steps {
+    withKubeConfig(credentialsId: 'k8s-config') {
+      sh '''
+        echo "Pods / Image / Ready / Created"
+        kubectl get pods -l app=nginx \
+          -o custom-columns=\
+NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,CREATED:.metadata.creationTimestamp \
+          --no-headers
+
+        # suppress “not found” error
+        kubectl get svc nginx-service --ignore-not-found -o wide
+      '''
+    }
+  }
+}
+
     }
 
     post {
