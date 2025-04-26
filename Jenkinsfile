@@ -173,7 +173,7 @@ pipeline {
         stage('Deploy to k8s') {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
-                    sh 'kubectl apply -f /var/lib/jenkins/k8s-manifest'
+                    sh 'kubectl apply -f /home/gsairoop/DevSecOps-Pipeline/k8s-manifest/deployment.yaml'
                 }
             }
         }
