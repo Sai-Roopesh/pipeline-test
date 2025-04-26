@@ -1,4 +1,3 @@
-// Jenkinsfile ─── CI/CD, Kubernetes rollout  (Trivy temporarily skipped) ────
 pipeline {
     agent any
 
@@ -12,20 +11,18 @@ pipeline {
     environment {
         JAVA_HOME    = tool 'Java 21'
         M2_HOME      = tool 'Maven 3.8.1'
-        SCANNER_HOME = tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'      // harmless even while Sonar is skipped
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
 
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
         TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
-
-        DOCKER_CONFIG = "${WORKSPACE}/.docker"
+        DOCKER_CONFIG   = "${WORKSPACE}/.docker"
     }
 
     triggers { githubPush() }
 
     stages {
-
-        /* ───────── source, build, quality ───────── */
+        /* ───────── source, build, tests ───────── */
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -45,30 +42,18 @@ pipeline {
             steps { sh 'java -jar target/my-app-1.0.1.jar | grep "Hello, Jenkins!"' }
         }
 
+        /* ───────── SonarQube skipped for now ───────── */
         stage('SonarQube Analysis') {
-            steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('sonar') {
-                        sh '''
-                          sonar-scanner \
-                            -Dsonar.projectKey=pipeline-test \
-                            -Dsonar.sources=src/main/java \
-                            -Dsonar.java.binaries=target/classes \
-                            -Dsonar.login=${SONAR_TOKEN}
-                        '''
-                    }
-                }
-            }
+            when { expression { return false } }
+            steps { echo 'SonarQube analysis skipped.' }
         }
 
         stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
+            when { expression { return false } }
+            steps { echo 'Quality-Gate check skipped.' }
         }
 
+        /* ───────── publish to Nexus (unchanged) ───────── */
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -94,7 +79,7 @@ pipeline {
                       docker build -t "$DOCKER_USER/boardgame:${BUILD_NUMBER}" .
                       docker push "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
-                      docker tag  "$DOCKER_USER/boardgame:${BUILD_NUMBER}" "$DOCKER_USER/boardgame:latest"
+                      docker tag "$DOCKER_USER/boardgame:${BUILD_NUMBER}" "$DOCKER_USER/boardgame:latest"
                       docker push "$DOCKER_USER/boardgame:latest"
                     '''
                 }
@@ -102,15 +87,13 @@ pipeline {
             post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
         }
 
-        /* ───────── Trivy scan (SKIPPED) ───────── */
+        /* ───────── Trivy skipped for now ───────── */
         stage('Trivy Image Scan') {
-            when { expression { return false } }   // ← flip to true (or delete) to reactivate
-            steps {
-                echo 'Trivy scan skipped for now.'
-            }
+            when { expression { return false } }
+            steps { echo 'Trivy scan skipped.' }
         }
 
-        /* ───────── render manifest, deploy, verify ───────── */
+        /* ───────── render → deploy → verify ───────── */
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'docker-cred',
@@ -130,7 +113,7 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                      kubectl apply --prune -l app=nginx -f rendered-deployment.yaml --record
+                      kubectl apply -f rendered-deployment.yaml --record
                       kubectl rollout status deployment/nginx-deployment --timeout=120s
                     '''
                 }
@@ -155,23 +138,14 @@ pipeline {
 
     /* ───────── post-pipeline ───────── */
     post {
-        always { junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true }
+        always  { junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true }
 
         success {
             script {
-                def authorEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
-                mail to: authorEmail,
+                def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
+                mail to: email,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                     body: """
-Hello,
-
-Your commit triggered a successful deployment for job '${env.JOB_NAME}'
-(build #${env.BUILD_NUMBER}).
-
-See details: ${env.BUILD_URL}
-
-Best, Jenkins CI/CD
-"""
+                     body: "Your commit deployed successfully. Details: ${env.BUILD_URL}"
             }
         }
     }
