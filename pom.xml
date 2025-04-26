@@ -6,7 +6,6 @@
            http://maven.apache.org/xsd/maven-4.0.0.xsd">
 
   <modelVersion>4.0.0</modelVersion>
-
   <groupId>com.example</groupId>
   <artifactId>my-app</artifactId>
   <version>1.0.1</version>
@@ -19,11 +18,9 @@
   </properties>
 
   <build>
-    <!-- makes the output file target/app.jar -->
-    <finalName>app</finalName>
-
+    <!-- produce target/my-app-1.0.1.jar -->
+    <finalName>my-app-1.0.1</finalName>
     <plugins>
-      <!-- embed Main-Class so “java -jar app.jar” works -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
@@ -39,7 +36,6 @@
     </plugins>
   </build>
 
-  <!-- your Nexus repos: leave unchanged -->
   <distributionManagement>
     <repository>
       <id>nexus-releases</id>
