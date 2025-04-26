@@ -1,4 +1,3 @@
-// Jenkinsfile – CI/CD pipeline (Sonar & Trivy still disabled)
 pipeline {
     agent any
 
@@ -10,7 +9,7 @@ pipeline {
     environment {
         JAVA_HOME    = tool 'Java 21'
         M2_HOME      = tool 'Maven 3.8.1'
-        SCANNER_HOME = tool 'sonar-scanner'           // harmless while skipped
+        SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
 
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
@@ -45,32 +44,43 @@ pipeline {
                   PORT=8080
                   JAR=target/my-app-1.0.1.jar
 
-                  # kill any stray process
                   if lsof -Pi :"$PORT" -sTCP:LISTEN -t >/dev/null 2>&1; then
                       echo "Port $PORT busy – killing old process"
                       fuser -k ${PORT}/tcp || true
                       sleep 1
                   fi
 
-                  # start server
                   java -jar "$JAR" &
                   PID=$!
                   trap "kill $PID" EXIT
 
-                  # wait up to 15 s
                   for i in {1..15}; do
                       if curl -sf "http://localhost:$PORT" >/dev/null; then break; fi
                       sleep 1
                   done
 
-                  # verify response
                   curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
                 '''
             }
         }
 
-        stage('SonarQube Analysis') { when { expression { false } } steps { echo 'Sonar skipped.' } }
-        stage('Quality Gate')       { when { expression { false } } steps { echo 'Gate skipped.' } }
+        stage('SonarQube Analysis') {
+            when {
+                expression { false }
+            }
+            steps {
+                echo 'SonarQube analysis skipped.'
+            }
+        }
+
+        stage('Quality Gate') {
+            when {
+                expression { false }
+            }
+            steps {
+                echo 'Quality Gate skipped.'
+            }
+        }
 
         stage('Publish to Nexus') {
             steps {
@@ -104,7 +114,14 @@ pipeline {
             post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
         }
 
-        stage('Trivy Image Scan') { when { expression { false } } steps { echo 'Trivy skipped.' } }
+        stage('Trivy Image Scan') {
+            when {
+                expression { false }
+            }
+            steps {
+                echo 'Trivy scan skipped.'
+            }
+        }
 
         stage('Render manifest') {
             steps {
@@ -113,8 +130,7 @@ pipeline {
                                                   passwordVariable: 'IGNORED')]) {
                     sh '''
                       export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                               > rendered-deployment.yaml
+                      envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
                     '''
                 }
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
