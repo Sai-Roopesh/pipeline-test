@@ -32,7 +32,7 @@ pipeline {
 
         stage('Build & Test') {
             steps { sh 'mvn clean verify' }
-            post { success { archiveArtifacts artifacts: 'target/app.jar', fingerprint: true } }
+            post { success { archiveArtifacts artifacts: 'target/*.jar', fingerprint: true } }
         }
 
         /* ───────── bullet-proof Smoke Test ───────── */
