@@ -110,15 +110,21 @@ pipeline {
         }
 
         stage('Deploy to k8s') {
-            steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                      kubectl apply -f rendered-deployment.yaml --record
-                      kubectl rollout status deployment/nginx-deployment --timeout=120s
-                    '''
-                }
-            }
+    steps {
+        withKubeConfig(credentialsId: 'k8s-config') {
+            sh '''
+              set -e
+              kubectl apply -f rendered-deployment.yaml --record
+              if ! kubectl rollout status deployment/nginx-deployment --timeout=120s ; then
+                echo "---- rollout failed, dumping pod status ----"
+                kubectl get pods -l app=nginx -o wide
+                kubectl describe pods -l app=nginx
+                exit 1
+              fi
+            '''
         }
+    }
+}
 
         stage('Verify deployment') {
             steps {
