@@ -1,4 +1,4 @@
-<!-- pom.xml ── place in project root -->
+<!-- pom.xml – place at repository root -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="
@@ -9,7 +9,7 @@
 
   <groupId>com.example</groupId>
   <artifactId>my-app</artifactId>
-  <version>1.0.1</version>            <!-- bump as you wish -->
+  <version>1.0.1</version>
   <packaging>jar</packaging>
 
   <properties>
@@ -19,11 +19,11 @@
   </properties>
 
   <build>
-    <!-- 1. name the final file ‘app.jar’ -->
- 
+    <!-- makes the output file target/app.jar -->
+    <finalName>app</finalName>
 
     <plugins>
-      <!-- 2. embed Main-Class so `java -jar` works -->
+      <!-- embed Main-Class so “java -jar app.jar” works -->
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-jar-plugin</artifactId>
@@ -36,24 +36,10 @@
           </archive>
         </configuration>
       </plugin>
-
-      <!-- 3. (optional) make a fat-jar if you add external deps later
-           <plugin>
-             <groupId>org.apache.maven.plugins</groupId>
-             <artifactId>maven-shade-plugin</artifactId>
-             <version>3.5.0</version>
-             <executions>
-               <execution>
-                 <phase>package</phase>
-                 <goals><goal>shade</goal></goals>
-               </execution>
-             </executions>
-           </plugin>
-      -->
     </plugins>
   </build>
 
-  <!-- leave your Nexus section untouched -->
+  <!-- your Nexus repos: leave unchanged -->
   <distributionManagement>
     <repository>
       <id>nexus-releases</id>
