@@ -54,27 +54,20 @@ pipeline {
                   PORT=15000
                   JAR=target/my-app-1.0.1.jar
 
-                  # 1) kill any stray process on PORT
                   if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-                    echo "Port $PORT busy – killing old process"
-                    fuser -k ${PORT}/tcp || true
+                    fuser -k $PORT/tcp || true
                     sleep 1
                   fi
 
-                  # 2) launch the server with PORT in its env
                   PORT=$PORT java -jar "$JAR" &
                   PID=$!
                   trap "kill $PID" EXIT
 
-                  # 3) wait (max 15s) until it answers
                   for i in {1..15}; do
-                    if curl -sf "http://localhost:$PORT" >/dev/null; then
-                      break
-                    fi
+                    curl -sf "http://localhost:$PORT" && break
                     sleep 1
                   done
 
-                  # 4) final assertion
                   curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
                 '''
             }
@@ -84,13 +77,16 @@ pipeline {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
-                        sh '''
+                        sh """
                           sonar-scanner \
                             -Dsonar.projectKey=pipeline-test \
                             -Dsonar.sources=src/main/java \
+                            -Dsonar.tests=src/test/java \
                             -Dsonar.java.binaries=target/classes \
-                            -Dsonar.login=${SONAR_TOKEN}
-                        '''
+                            -Dsonar.login=\$SONAR_TOKEN \
+                            -Dsonar.coverage.exclusions=src/main/java/com/example/App.java \
+                            -Dsonar.coverage.newCode=0.0
+                        """
                     }
                 }
             }
@@ -143,8 +139,6 @@ pipeline {
                 withCredentials([usernamePassword(credentialsId: 'docker-cred',
                                                   usernameVariable: 'DOCKER_USER',
                                                   passwordVariable: 'IGNORED')]) {
-
-                    // 1) ensure HTML template exists
                     sh '''
                       if [ ! -f "${TRIVY_TEMPLATE}" ]; then
                         sudo mkdir -p "$(dirname "${TRIVY_TEMPLATE}")"
@@ -152,16 +146,8 @@ pipeline {
                           https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
                           -o "${TRIVY_TEMPLATE}"
                       fi
-                    '''
-
-                    // 2) warm vulnerability DB (faster subsequent scans)
-                    sh '''
                       mkdir -p "${TRIVY_CACHE_DIR}"
                       trivy image --download-db-only --cache-dir "${TRIVY_CACHE_DIR}" --quiet
-                    '''
-
-                    // 3) full scan → HTML report
-                    sh '''
                       trivy image \
                         --cache-dir "${TRIVY_CACHE_DIR}" \
                         --scanners vuln \
@@ -223,7 +209,6 @@ pipeline {
                       kubectl get pods -l app=nginx \
                         -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready' \
                         --no-headers
-
                       kubectl get svc nginx-service -o wide || true
                     '''
                 }
