@@ -74,30 +74,30 @@ pipeline {
        }
      }
 
-     // stage('SonarQube Analysis') {
-     //   steps {
-     //     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-     //       withSonarQubeEnv('sonar') {
-     //         sh """
-     //           sonar-scanner \
-     //             -Dsonar.projectKey=pipeline-test \
-     //             -Dsonar.sources=src/main/java \
-     //             -Dsonar.tests=src/test/java \
-     //             -Dsonar.java.binaries=target/classes \
-     //             -Dsonar.login=\$SONAR_TOKEN
-     //         """
-     //       }
-     //     }
-     //   }
-     // }
+     stage('SonarQube Analysis') {
+       steps {
+         withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+           withSonarQubeEnv('sonar') {
+             sh """
+               sonar-scanner \
+                 -Dsonar.projectKey=pipeline-test \
+                 -Dsonar.sources=src/main/java \
+                 -Dsonar.tests=src/test/java \
+                 -Dsonar.java.binaries=target/classes \
+                 -Dsonar.login=\$SONAR_TOKEN
+             """
+           }
+         }
+       }
+     }
 
-     // stage('Quality Gate') {
-     //   steps {
-     //     timeout(time: 5, unit: 'MINUTES') {
-     //       waitForQualityGate abortPipeline: true
-     //     }
-     //   }
-     // }
+     stage('Quality Gate') {
+       steps {
+         timeout(time: 5, unit: 'MINUTES') {
+           waitForQualityGate abortPipeline: true
+         }
+       }
+     }
 
      stage('Publish to Nexus') {
        steps {
@@ -132,52 +132,36 @@ pipeline {
        post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
      }
 
-     // stage('Trivy Image Scan') {
-     //   steps {
-     //     withCredentials([usernamePassword(
-     //         credentialsId: 'docker-cred',
-     //         usernameVariable: 'DOCKER_USER',
-     //         passwordVariable: 'IGNORED'
-     //     )]) {
-     //       sh '''
-     //         # ensure HTML template
-     //         if [ ! -f "${TRIVY_TEMPLATE}" ]; then
-     //           sudo mkdir -p "$(dirname "${TRIVY_TEMPLATE}")"
-     //           sudo curl -sSL \
-     //             https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
-     //             -o "${TRIVY_TEMPLATE}"
-     //         fi
-
-     //         # warm the DB
-     //         mkdir -p "${TRIVY_CACHE_DIR}"
-     //         trivy image --download-db-only \
-     //           --cache-dir "${TRIVY_CACHE_DIR}" --quiet
-
-     //         # **only** run config & secret scans (no vuln):
-     //         trivy image \
-     //           --cache-dir "${TRIVY_CACHE_DIR}" \
-     //           --scanners config,secret \
-     //           --format template \
-     //           --template "@${TRIVY_TEMPLATE}" \
-     //           --timeout 15m \
-     //           -o trivy-image-report.html \
-     //           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-     //       '''
-     //     }
-     //   }
-     //   post {
-     //     always {
-     //       archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
-     //       publishHTML target: [
-     //         reportDir: '.',
-     //         reportFiles: 'trivy-image-report.html',
-     //         reportName: 'Trivy Image Scan',
-     //         keepAll: true,
-     //         alwaysLinkToLastBuild: true
-     //       ]
-     //     }
-     //   }
-     // }
+     stage('Trivy Config-Only Scan') {
+       steps {
+         withCredentials([usernamePassword(
+           credentialsId: 'docker-cred',
+           usernameVariable: 'DOCKER_USER',
+           passwordVariable: 'IGNORED'
+         )]) {
+           sh '''
+             # quick config-only scan (skips vuln & secret checks)
+             trivy image \
+               --scanners config \
+               --format table \
+               -o trivy-config-report.html \
+               "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+           '''
+         }
+       }
+       post {
+         always {
+           archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
+           publishHTML(target: [
+             reportDir: '.',
+             reportFiles: 'trivy-config-report.html',
+             reportName: 'Trivy Config Scan',
+             keepAll: true,
+             alwaysLinkToLastBuild: true
+           ])
+         }
+       }
+     }
 
      stage('Render manifest') {
        steps {
