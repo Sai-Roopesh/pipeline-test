@@ -1,20 +1,22 @@
-// Jenkinsfile – CI/CD pipeline with SonarQube & Trivy DISABLED, Docker & Kubernetes
+// Jenkinsfile – CI/CD pipeline with SonarQube, Trivy, Docker & Kubernetes
 pipeline {
   agent any
 
+  /* ───── toolchains ───── */
   tools {
     jdk   'Java 21'
     maven 'Maven 3.8.1'
   }
 
+  /* ───── global env ───── */
   environment {
     JAVA_HOME    = tool 'Java 21'
     M2_HOME      = tool 'Maven 3.8.1'
     SCANNER_HOME = tool 'sonar-scanner'
     PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
 
-    TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
-    TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
+    // TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
+    // TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
 
     DOCKER_CONFIG   = "${WORKSPACE}/.docker"
   }
@@ -51,6 +53,7 @@ pipeline {
 
           # kill stray process
           if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+            echo "Port $PORT busy – killing old process"
             fuser -k ${PORT}/tcp || true
             sleep 1
           fi
@@ -72,17 +75,30 @@ pipeline {
       }
     }
 
-    /* ====== DISABLED: SonarQube Analysis ======
-    stage('SonarQube Analysis') {
-      when { expression { false } }
-      steps { echo "SonarQube stage skipped." }
-    }
+    // stage('SonarQube Analysis') {
+    //   steps {
+    //     withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+    //       withSonarQubeEnv('sonar') {
+    //         sh """
+    //           sonar-scanner \
+    //             -Dsonar.projectKey=pipeline-test \
+    //             -Dsonar.sources=src/main/java \
+    //             -Dsonar.tests=src/test/java \
+    //             -Dsonar.java.binaries=target/classes \
+    //             -Dsonar.login=\$SONAR_TOKEN
+    //         """
+    //       }
+    //     }
+    //   }
+    // }
 
-    stage('Quality Gate') {
-      when { expression { false } }
-      steps { echo "Quality Gate skipped." }
-    }
-    ============================================ */
+    // stage('Quality Gate') {
+    //   steps {
+    //     timeout(time: 5, unit: 'MINUTES') {
+    //       waitForQualityGate abortPipeline: true
+    //     }
+    //   }
+    // }
 
     stage('Publish to Nexus') {
       steps {
@@ -117,12 +133,52 @@ pipeline {
       post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
     }
 
-    /* ====== DISABLED: Trivy Image Scan ======
-    stage('Trivy Image Scan') {
-      when { expression { false } }
-      steps { echo "Trivy scan skipped." }
-    }
-    ============================================ */
+    // stage('Trivy Image Scan') {
+    //   steps {
+    //     withCredentials([usernamePassword(
+    //         credentialsId: 'docker-cred',
+    //         usernameVariable: 'DOCKER_USER',
+    //         passwordVariable: 'IGNORED'
+    //     )]) {
+    //       sh '''
+    //         # ensure HTML template
+    //         if [ ! -f "${TRIVY_TEMPLATE}" ]; then
+    //           sudo mkdir -p "$(dirname "${TRIVY_TEMPLATE}")"
+    //           sudo curl -sSL \
+    //             https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
+    //             -o "${TRIVY_TEMPLATE}"
+    //         fi
+
+    //         # warm the DB
+    //         mkdir -p "${TRIVY_CACHE_DIR}"
+    //         trivy image --download-db-only \
+    //           --cache-dir "${TRIVY_CACHE_DIR}" --quiet
+
+    //         # **only** run config & secret scans (no vuln):
+    //         trivy image \
+    //           --cache-dir "${TRIVY_CACHE_DIR}" \
+    //           --scanners config,secret \
+    //           --format template \
+    //           --template "@${TRIVY_TEMPLATE}" \
+    //           --timeout 15m \
+    //           -o trivy-image-report.html \
+    //           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+    //       '''
+    //     }
+    //   }
+    //   post {
+    //     always {
+    //       archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
+    //       publishHTML target: [
+    //         reportDir: '.',
+    //         reportFiles: 'trivy-image-report.html',
+    //         reportName: 'Trivy Image Scan',
+    //         keepAll: true,
+    //         alwaysLinkToLastBuild: true
+    //       ]
+    //     }
+    //   }
+    // }
 
     stage('Render manifest') {
       steps {
@@ -131,7 +187,8 @@ pipeline {
                                           passwordVariable: 'IGNORED')]) {
           sh '''
             export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-            envsubst < deployment.yaml > rendered-deployment.yaml
+            envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
+                     > rendered-deployment.yaml
           '''
         }
         archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
@@ -142,9 +199,9 @@ pipeline {
       steps {
         withKubeConfig(credentialsId: 'k8s-config') {
           sh '''
-            # rolling‐update: old pods will be torn down automatically
+            # apply only your Deployment (no --prune)
             kubectl apply -f rendered-deployment.yaml --record
-            # no rollout‐status check, so we don't block on readiness right now
+            kubectl rollout status deployment/nginx-deployment --timeout=1200s
           '''
         }
       }
@@ -165,13 +222,17 @@ pipeline {
     }
   }
 
+  /* ───────── post-pipeline ───────── */
   post {
     always {
       junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
     }
     success {
       script {
-        def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
+        def email = sh(
+          script: "git --no-pager show -s --format='%ae'",
+          returnStdout: true
+        ).trim()
         mail to:      email,
              subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
              body: """
