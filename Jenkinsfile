@@ -1,14 +1,12 @@
-// Jenkinsfile – CI/CD pipeline with SonarQube, Trivy, Docker & Kubernetes
+// Jenkinsfile – CI/CD pipeline with SonarQube & Trivy DISABLED, Docker & Kubernetes
 pipeline {
   agent any
 
-  /* ───── toolchains ───── */
   tools {
     jdk   'Java 21'
     maven 'Maven 3.8.1'
   }
 
-  /* ───── global env ───── */
   environment {
     JAVA_HOME    = tool 'Java 21'
     M2_HOME      = tool 'Maven 3.8.1'
@@ -53,7 +51,6 @@ pipeline {
 
           # kill stray process
           if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-            echo "Port $PORT busy – killing old process"
             fuser -k ${PORT}/tcp || true
             sleep 1
           fi
@@ -78,16 +75,12 @@ pipeline {
     /* ====== DISABLED: SonarQube Analysis ======
     stage('SonarQube Analysis') {
       when { expression { false } }
-      steps {
-        echo "SonarQube stage skipped."
-      }
+      steps { echo "SonarQube stage skipped." }
     }
 
     stage('Quality Gate') {
       when { expression { false } }
-      steps {
-        echo "Quality Gate skipped."
-      }
+      steps { echo "Quality Gate skipped." }
     }
     ============================================ */
 
@@ -127,9 +120,7 @@ pipeline {
     /* ====== DISABLED: Trivy Image Scan ======
     stage('Trivy Image Scan') {
       when { expression { false } }
-      steps {
-        echo "Trivy scan skipped."
-      }
+      steps { echo "Trivy scan skipped." }
     }
     ============================================ */
 
@@ -140,8 +131,7 @@ pipeline {
                                           passwordVariable: 'IGNORED')]) {
           sh '''
             export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-            envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                     > rendered-deployment.yaml
+            envsubst < deployment.yaml > rendered-deployment.yaml
           '''
         }
         archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
@@ -152,9 +142,9 @@ pipeline {
       steps {
         withKubeConfig(credentialsId: 'k8s-config') {
           sh '''
-            # apply only your Deployment (no --prune)
+            # rolling‐update: old pods will be torn down automatically
             kubectl apply -f rendered-deployment.yaml --record
-            # kubectl rollout status deployment/nginx-deployment --timeout=1200s
+            # no rollout‐status check, so we don't block on readiness right now
           '''
         }
       }
@@ -175,17 +165,13 @@ pipeline {
     }
   }
 
-  /* ───────── post-pipeline ───────── */
   post {
     always {
       junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
     }
     success {
       script {
-        def email = sh(
-          script: "git --no-pager show -s --format='%ae'",
-          returnStdout: true
-        ).trim()
+        def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
         mail to:      email,
              subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
              body: """
