@@ -175,31 +175,32 @@ NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatu
 
     }
 
-    post {
-        always  {
-            junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
-        }
+   post {
+    success {
+        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+            script {
+                // Get the commit author's GitHub email
+                def commitEmail = sh(script: "git log -1 --pretty=format:'%ae'", returnStdout: true).trim()
+                
+                // Extract GitHub username (basic assumption from email before '@')
+                def githubUser = commitEmail.split('@')[0].replaceAll("\\.", "")
+                
+                def repoOwner = 'Sai-Roopesh'      // Update your GitHub owner
+                def repoName  = 'pipeline-test'    // Update your repo name
+                
+                // Try finding the pull request or issue dynamically (advanced) 
+                // For now, still using a fixed issue (you can automate this later)
 
-        success {
-            withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-                script {
-                    // Capture GitHub username from Git log
-                    def githubEmail = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
-                    def githubUser = githubEmail.split('@')[0].replaceAll("\\.", "")
-
-                    def repoOwner = 'Sai-Roopesh'      // <-- Update if needed
-                    def repoName  = 'pipeline-test'     // <-- Update if needed
-
-                    // Post a GitHub comment mentioning the user
-                    sh """
-                      curl -X POST \
-                        -H "Authorization: token ${GITHUB_TOKEN}" \
-                        -H "Accept: application/vnd.github.v3+json" \
-                        https://api.github.com/repos/${repoOwner}/${repoName}/issues/1/comments \
-                        -d '{"body": "@${githubUser} ✅ Your application has been deployed! View here: ${BUILD_URL}"}'
-                    """
-                }
+                sh """
+                  curl -X POST \
+                    -H "Authorization: token ${GITHUB_TOKEN}" \
+                    -H "Accept: application/vnd.github.v3+json" \
+                    https://api.github.com/repos/${repoOwner}/${repoName}/issues/1/comments \
+                    -d '{"body": "@${githubUser} 🚀 Your commit has been successfully deployed! View: ${BUILD_URL}"}'
+                """
             }
         }
     }
+}
+
 }
