@@ -177,29 +177,12 @@ NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatu
 
    post {
     success {
-        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-            script {
-                // Get the commit author's GitHub email
-                def commitEmail = sh(script: "git log -1 --pretty=format:'%ae'", returnStdout: true).trim()
-                
-                // Extract GitHub username (basic assumption from email before '@')
-                def githubUser = commitEmail.split('@')[0].replaceAll("\\.", "")
-                
-                def repoOwner = 'Sai-Roopesh'      // Update your GitHub owner
-                def repoName  = 'pipeline-test'    // Update your repo name
-                
-                // Try finding the pull request or issue dynamically (advanced) 
-                // For now, still using a fixed issue (you can automate this later)
-
-                sh """
-                  curl -X POST \
-                    -H "Authorization: token ${GITHUB_TOKEN}" \
-                    -H "Accept: application/vnd.github.v3+json" \
-                    https://api.github.com/repos/${repoOwner}/${repoName}/issues/1/comments \
-                    -d '{"body": "@${githubUser} 🚀 Your commit has been successfully deployed! View: ${BUILD_URL}"}'
-                """
-            }
-        }
+      mail to:   'sairoopesh21@gmail.com',
+           subject: "✅ ${env.JOB_NAME} #${env.BUILD_NUMBER} Succeeded",
+           body:    """\
+Build ${env.JOB_NAME} #${env.BUILD_NUMBER} finished ⇒ SUCCESS  
+Details: ${env.BUILD_URL}
+"""
     }
 }
 
