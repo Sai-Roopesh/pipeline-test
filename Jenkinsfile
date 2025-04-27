@@ -202,7 +202,7 @@ pipeline {
           sh '''
             # apply only your Deployment (no --prune)
             kubectl apply -f rendered-deployment.yaml --record
-            kubectl rollout status deployment/nginx-deployment --timeout=120s
+            kubectl rollout status deployment/nginx-deployment --timeout=1200s
           '''
         }
       }
