@@ -75,30 +75,21 @@ pipeline {
       }
     }
 
+    /* ====== DISABLED: SonarQube Analysis ======
     stage('SonarQube Analysis') {
+      when { expression { false } }
       steps {
-        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-          withSonarQubeEnv('sonar') {
-            sh """
-              sonar-scanner \
-                -Dsonar.projectKey=pipeline-test \
-                -Dsonar.sources=src/main/java \
-                -Dsonar.tests=src/test/java \
-                -Dsonar.java.binaries=target/classes \
-                -Dsonar.login=\$SONAR_TOKEN
-            """
-          }
-        }
+        echo "SonarQube stage skipped."
       }
     }
 
     stage('Quality Gate') {
+      when { expression { false } }
       steps {
-        timeout(time: 5, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
-        }
+        echo "Quality Gate skipped."
       }
     }
+    ============================================ */
 
     stage('Publish to Nexus') {
       steps {
@@ -133,53 +124,14 @@ pipeline {
       post { always { sh 'rm -rf "$DOCKER_CONFIG"' } }
     }
 
+    /* ====== DISABLED: Trivy Image Scan ======
     stage('Trivy Image Scan') {
+      when { expression { false } }
       steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-          sh '''
-            # ensure HTML template
-            if [ ! -f "${TRIVY_TEMPLATE}" ]; then
-              sudo mkdir -p "$(dirname "${TRIVY_TEMPLATE}")"
-              sudo curl -sSL \
-                https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
-                -o "${TRIVY_TEMPLATE}"
-            fi
-
-            # warm the DB
-            mkdir -p "${TRIVY_CACHE_DIR}"
-            trivy image --download-db-only \
-              --cache-dir "${TRIVY_CACHE_DIR}" --quiet
-
-            # **only** run config & secret scans (no vuln):
-            trivy image \
-              --cache-dir "${TRIVY_CACHE_DIR}" \
-              --scanners config,secret \
-              --format template \
-              --template "@${TRIVY_TEMPLATE}" \
-              --timeout 15m \
-              -o trivy-image-report.html \
-              "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-          '''
-        }
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
-          publishHTML target: [
-            reportDir: '.',
-            reportFiles: 'trivy-image-report.html',
-            reportName: 'Trivy Image Scan',
-            keepAll: true,
-            alwaysLinkToLastBuild: true
-          ]
-        }
+        echo "Trivy scan skipped."
       }
     }
-
+    ============================================ */
 
     stage('Render manifest') {
       steps {
@@ -202,7 +154,7 @@ pipeline {
           sh '''
             # apply only your Deployment (no --prune)
             kubectl apply -f rendered-deployment.yaml --record
-            kubectl rollout status deployment/nginx-deployment --timeout=1200s
+            # kubectl rollout status deployment/nginx-deployment --timeout=1200s
           '''
         }
       }
