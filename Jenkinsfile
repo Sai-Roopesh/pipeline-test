@@ -169,10 +169,28 @@ NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatu
         }
         success {
             script {
-                def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
-                mail to: email,
-                     subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                     body: "Your commit deployed successfully. Details: ${env.BUILD_URL}"
+                // grab commit author's email (or replace with fixed recipient)
+                def recipient = sh(
+                    script: "git --no-pager show -s --format='%ae'",
+                    returnStdout: true
+                ).trim()
+
+                mail(
+                  to:      recipient,
+                  subject: "✅ Jenkins Pipeline Succeeded: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                  body:    """\
+Hello,
+
+Your recent commit was built, tested, and deployed successfully.
+
+• Job:  ${env.JOB_NAME}
+• Build: ${env.BUILD_NUMBER}
+• URL:   ${env.BUILD_URL}
+
+Cheers,
+Jenkins
+"""
+                )
             }
         }
     }
