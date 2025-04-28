@@ -122,11 +122,8 @@ pipeline {
         }
       }
 
-      stage('Trivy Config-Only Scan') {
-  // Fail this stage if it takes longer than 5 minutes
-  options {
-    timeout(time: 5, unit: 'MINUTES')
-  }
+   stage('Trivy Vulnerability Scan') {
+  options { timeout(time: 5, unit: 'MINUTES') }
   steps {
     withCredentials([usernamePassword(
       credentialsId: 'docker-cred',
@@ -134,30 +131,31 @@ pipeline {
       passwordVariable: 'IGNORED'
     )]) {
       sh '''
-        # Use the new 'misconfig' scanner (replaces deprecated 'config')
+        # default scanners = vuln,secret,misconfig → we’ll run vuln+secret
         trivy image \
-          --scanners misconfig \
-          --format table \
-          --timeout 5m \
+          --scanners vuln \
+          --format html \
           --exit-code 0 \
-          -o trivy-misconfig-report.html \
+          --timeout 5m \
+          -o trivy-vuln-report.html \
           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
       '''
     }
   }
   post {
     always {
-      archiveArtifacts artifacts: 'trivy-misconfig-report.html', fingerprint: true
+      archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
       publishHTML target: [
-        reportDir: '.',
-        reportFiles: 'trivy-misconfig-report.html',
-        reportName: 'Trivy Misconfig Scan',
-        keepAll: true,
+        reportDir:   '.',
+        reportFiles:'trivy-vuln-report.html',
+        reportName: 'Trivy Vulnerability Scan',
+        keepAll:     true,
         alwaysLinkToLastBuild: true
       ]
     }
   }
 }
+
 
 
       stage('Render manifest') {
