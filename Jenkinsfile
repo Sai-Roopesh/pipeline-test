@@ -123,7 +123,7 @@ pipeline {
   "auths": {
     "https://index.docker.io/v1/": {}
   },
-  "credsStore": "desktop"  # or "pass" or "secretservice" depending on your runner
+  "credsStore": "pass" 
 }
 EOF
              echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin
