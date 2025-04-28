@@ -123,7 +123,9 @@ pipeline {
       }
 
    stage('Trivy Vulnerability Scan') {
-  options { timeout(time: 5, unit: 'MINUTES') }
+  options {
+    timeout(time: 5, unit: 'MINUTES')
+  }
   steps {
     withCredentials([usernamePassword(
       credentialsId: 'docker-cred',
@@ -131,10 +133,18 @@ pipeline {
       passwordVariable: 'IGNORED'
     )]) {
       sh '''
-        # default scanners = vuln,secret,misconfig → we’ll run vuln+secret
+        # 1) Download the official HTML template if we don’t already have it
+        if [ ! -f html.tpl ]; then
+          curl -sSL \
+            https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/html.tpl \
+            -o html.tpl
+        fi
+
+        # 2) Run the vuln+secret scanners, using the HTML template
         trivy image \
-          --scanners vuln \
-          --format html \
+          --scanners vuln,secret \
+          --format template \
+          --template "@html.tpl" \
           --exit-code 0 \
           --timeout 5m \
           -o trivy-vuln-report.html \
@@ -146,15 +156,16 @@ pipeline {
     always {
       archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
       publishHTML target: [
-        reportDir:   '.',
-        reportFiles:'trivy-vuln-report.html',
-        reportName: 'Trivy Vulnerability Scan',
-        keepAll:     true,
+        reportDir:        '.',
+        reportFiles:     'trivy-vuln-report.html',
+        reportName:      'Trivy Vulnerability Scan',
+        keepAll:          true,
         alwaysLinkToLastBuild: true
       ]
     }
   }
 }
+
 
 
 
