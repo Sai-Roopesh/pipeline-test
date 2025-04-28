@@ -123,34 +123,42 @@ pipeline {
       }
 
       stage('Trivy Config-Only Scan') {
-        steps {
-          withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-          )]) {
-            sh '''
-              trivy image \
-                --scanners config \
-                --format table \
-                -o trivy-config-report.html \
-                "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-            '''
-          }
-        }
-        post {
-          always {
-            archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
-            publishHTML target: [
-              reportDir: '.',
-              reportFiles: 'trivy-config-report.html',
-              reportName: 'Trivy Config Scan',
-              keepAll: true,
-              alwaysLinkToLastBuild: true
-            ]
-          }
-        }
-      }
+  // Fail this stage if it takes longer than 5 minutes
+  options {
+    timeout(time: 5, unit: 'MINUTES')
+  }
+  steps {
+    withCredentials([usernamePassword(
+      credentialsId: 'docker-cred',
+      usernameVariable: 'DOCKER_USER',
+      passwordVariable: 'IGNORED'
+    )]) {
+      sh '''
+        # Use the new 'misconfig' scanner (replaces deprecated 'config')
+        trivy image \
+          --scanners misconfig \
+          --format table \
+          --timeout 5m \
+          --exit-code 0 \
+          -o trivy-misconfig-report.html \
+          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+      '''
+    }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'trivy-misconfig-report.html', fingerprint: true
+      publishHTML target: [
+        reportDir: '.',
+        reportFiles: 'trivy-misconfig-report.html',
+        reportName: 'Trivy Misconfig Scan',
+        keepAll: true,
+        alwaysLinkToLastBuild: true
+      ]
+    }
+  }
+}
+
 
       stage('Render manifest') {
         steps {
