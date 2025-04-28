@@ -108,23 +108,22 @@ pipeline {
         }
 
         stage('Build & Push Docker image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        // docker.withRegistry uses --password-stdin under the hood, so no insecure warning
-                        docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-                            img.push('latest')
-                        }
-                    }
-                }
-            }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-cred',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            sh '''
+                echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin
+                docker build -t "$DOCKER_USER/boardgame:${BUILD_NUMBER}" .
+                docker push "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                docker tag "$DOCKER_USER/boardgame:${BUILD_NUMBER}" "$DOCKER_USER/boardgame:latest"
+                docker push "$DOCKER_USER/boardgame:latest"
+            '''
         }
+    }
+}
 
         stage('Trivy Config-Only Scan') {
             steps {
@@ -137,7 +136,7 @@ pipeline {
                         trivy image \
                             --scanners config \
                             --format template --template "${TRIVY_TEMPLATE}" \
-                            --scanner vuln
+                            --scanner vuln \
                             --exit-code 0 \
                             --timeout 15m \
                             -o trivy-config-report.html \
