@@ -145,6 +145,7 @@ pipeline {
                   golang:1.12-alpine
             '''
         }
+        archiveArtifacts artifacts: '*.html', fingerprint: true
     }
 }
 
