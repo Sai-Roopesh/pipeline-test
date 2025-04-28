@@ -118,6 +118,14 @@ pipeline {
            sh '''
              set -e
              mkdir -p "$DOCKER_CONFIG"
+             cat > "$DOCKER_CONFIG/config.json" <<EOF
+{
+  "auths": {
+    "https://index.docker.io/v1/": {}
+  },
+  "credsStore": "desktop"  # or "pass" or "secretservice" depending on your runner
+}
+EOF
              echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin
 
              docker build -t "$DOCKER_USER/boardgame:${BUILD_NUMBER}" .
