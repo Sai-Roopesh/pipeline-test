@@ -125,73 +125,41 @@ pipeline {
             }
         }
 
-        stage('Trivy Config-Only Scan (HTML)') {
-            options { timeout(time: 5, unit: 'MINUTES') }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    sh """
-                        trivy image \
-                          --scanners config \
-                          --format template \
-                          --template \"${TRIVY_TEMPLATE}\" \
-                          --exit-code 0 \
-                          --timeout 5m \
-                          -o trivy-config-report.html \
-                          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
-                    """
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir:             '.',
-                        reportFiles:          'trivy-config-report.html',
-                        reportName:           'Trivy Config Scan (HTML)',
-                        keepAll:              true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
-            }
-        }
 
-        stage('Trivy Vulnerability Scan (HTML)') {
-            options { timeout(time: 15, unit: 'MINUTES') }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    sh """
-                        trivy image \
-                          --scanners vuln \
-                          --format template \
-                          --template \"${TRIVY_TEMPLATE}\" \
-                          --exit-code 0 \
-                          --timeout 15m \
-                          -o trivy-vuln-report.html \
-                          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
-                    """
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir:             '.',
-                        reportFiles:          'trivy-vuln-report.html',
-                        reportName:           'Trivy Vulnerability Scan (HTML)',
-                        keepAll:              true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
-            }
-        }
+       stage('Trivy Vulnerability Scan (HTML)') {
+  options { timeout(time: 15, unit: 'MINUTES') }
+  steps {
+    withCredentials([usernamePassword(
+      credentialsId: 'docker-cred',
+      usernameVariable: 'DOCKER_USER',
+      passwordVariable: 'IGNORED'
+    )]) {
+      sh """
+        trivy image \
+          --scanners vuln,secret \
+          --format template \
+          --template \"${TRIVY_TEMPLATE}\" \
+          --exit-code 0 \
+          --timeout 15m \
+          -o trivy-vuln-report.html \
+          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
+      """
+    }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
+      // <-- publishHTML here, at the same level as archiveArtifacts:
+      publishHTML target: [
+        reportDir:             '.',
+        reportFiles:          'trivy-vuln-report.html',
+        reportName:           'Trivy Vulnerability Scan (HTML)',
+        keepAll:              true,
+        alwaysLinkToLastBuild: true
+      ]
+    }
+  }
+}
 
         stage('Render manifest') {
             steps {
