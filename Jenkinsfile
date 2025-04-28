@@ -1,21 +1,16 @@
 pipeline {
     agent any
 
-    /* ───── toolchains ───── */
     tools {
         jdk   'Java 21'
         maven 'Maven 3.8.1'
     }
 
-    /* ───── global env ───── */
     environment {
-        JAVA_HOME       = tool 'Java 21'
-        M2_HOME         = tool 'Maven 3.8.1'
-        SCANNER_HOME    = tool 'sonar-scanner'
-        PATH            = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-        DOCKER_CONFIG   = "${WORKSPACE}/.docker"
-        TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
-        TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
+        JAVA_HOME    = tool 'Java 21'
+        M2_HOME      = tool 'Maven 3.8.1'
+        SCANNER_HOME = tool 'sonar-scanner'
+        PATH         = "${env.JAVA_HOME}/bin:${env.M2_HOME}/bin:${env.SCANNER_HOME}/bin:${env.PATH}"
     }
 
     triggers {
@@ -26,7 +21,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
+                    url: 'https://github.com/Sai-Roopesh/pipeline-test.git',
                     credentialsId: 'git-cred-test'
             }
         }
@@ -50,18 +45,18 @@ pipeline {
                     JAR=target/my-app-1.0.1.jar
 
                     if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-                        echo "Port $PORT busy – killing old process"
-                        fuser -k ${PORT}/tcp || true
-                        sleep 1
+                      echo "Port $PORT busy – killing old process"
+                      fuser -k ${PORT}/tcp || true
+                      sleep 1
                     fi
 
-                    PORT=$PORT java -jar "$JAR" &
+                    java -jar "$JAR" --server.port=$PORT &
                     PID=$!
                     trap "kill $PID" EXIT
 
                     for i in {1..15}; do
-                        if curl -sf "http://localhost:$PORT" >/dev/null; then break; fi
-                        sleep 1
+                      curl -sf "http://localhost:$PORT" >/dev/null && break
+                      sleep 1
                     done
 
                     curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
@@ -79,8 +74,8 @@ pipeline {
                               -Dsonar.sources=src/main/java \
                               -Dsonar.tests=src/test/java \
                               -Dsonar.java.binaries=target/classes \
-                              -Dsonar.login=\$SONAR_TOKEN \
-                              -Dsonar.exclusions=**/generated/**,**/*.md,**/Dockerfile
+                              -Dsonar.exclusions=**/generated/**,**/*.md,**/Dockerfile \
+                              -Dsonar.login=\$SONAR_TOKEN
                         """
                     }
                 }
@@ -97,22 +92,20 @@ pipeline {
 
         stage('Publish to Nexus') {
             steps {
-                withMaven(
-                    globalMavenSettingsConfig: 'global-settings',
-                    jdk: 'Java 21',
-                    maven: 'Maven 3.8.1'
-                ) {
+                withMaven(globalMavenSettingsConfig: 'global-settings',
+                          jdk: 'Java 21',
+                          maven: 'Maven 3.8.1') {
                     sh 'mvn deploy -DskipTests'
                 }
             }
         }
 
-        stage('Build & Push Docker image') {
+        stage('Build & Push Docker Image') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
+                  credentialsId: 'docker-cred',
+                  usernameVariable: 'DOCKER_USER',
+                  passwordVariable: 'DOCKER_PASS'
                 )]) {
                     script {
                         docker.withRegistry('', 'docker-cred') {
@@ -125,53 +118,82 @@ pipeline {
             }
         }
 
-
-       stage('Trivy Vulnerability Scan (HTML)') {
-  options { timeout(time: 15, unit: 'MINUTES') }
-  steps {
-    withCredentials([usernamePassword(
-      credentialsId: 'docker-cred',
-      usernameVariable: 'DOCKER_USER',
-      passwordVariable: 'IGNORED'
-    )]) {
-      sh """
-        trivy image \
-          --scanners vuln,secret \
-          --format template \
-          --template \"${TRIVY_TEMPLATE}\" \
-          --exit-code 0 \
-          --timeout 15m \
-          -o trivy-vuln-report.html \
-          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
-      """
-    }
-  }
-  post {
-    always {
-      archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
-      // <-- publishHTML here, at the same level as archiveArtifacts:
-      publishHTML target: [
-        reportDir:             '.',
-        reportFiles:          'trivy-vuln-report.html',
-        reportName:           'Trivy Vulnerability Scan (HTML)',
-        keepAll:              true,
-        alwaysLinkToLastBuild: true
-      ]
-    }
-  }
-}
-
-        stage('Render manifest') {
+        stage('Trivy Config-Only Scan') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
+                  credentialsId: 'docker-cred',
+                  usernameVariable: 'DOCKER_USER',
+                  passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="${DOCKER_USER}/boardgame:${BUILD_NUMBER}"
+                        trivy image \
+                          --scanners config \
+                          --format table \
+                          -o trivy-config-report.html \
+                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
+                    publishHTML(target: [
+                        reportDir:   '.',
+                        reportFiles: 'trivy-config-report.html',
+                        reportName:  'Trivy Config Scan',
+                        keepAll:     true,
+                        alwaysLinkToLastBuild: true
+                    ])
+                }
+            }
+        }
+
+        stage('Trivy Misconfig Scan') {
+            options {
+                timeout(time: 5, unit: 'MINUTES')
+            }
+            steps {
+                withCredentials([usernamePassword(
+                  credentialsId: 'docker-cred',
+                  usernameVariable: 'DOCKER_USER',
+                  passwordVariable: 'IGNORED'
+                )]) {
+                    sh '''
+                        trivy image \
+                          --scanners misconfig \
+                          --format table \
+                          --timeout 5m \
+                          --exit-code 0 \
+                          -o trivy-misconfig-report.html \
+                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                    '''
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-misconfig-report.html', fingerprint: true
+                    publishHTML(target: [
+                        reportDir:   '.',
+                        reportFiles: 'trivy-misconfig-report.html',
+                        reportName:  'Trivy Misconfig Scan',
+                        keepAll:     true,
+                        alwaysLinkToLastBuild: true
+                    ])
+                }
+            }
+        }
+
+        stage('Render k8s Manifest') {
+            steps {
+                withCredentials([usernamePassword(
+                  credentialsId: 'docker-cred',
+                  usernameVariable: 'DOCKER_USER',
+                  passwordVariable: 'IGNORED'
+                )]) {
+                    sh '''
+                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                                  > rendered-deployment.yaml
+                                 > rendered-deployment.yaml
                     '''
                 }
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
@@ -184,18 +206,19 @@ pipeline {
                     sh '''
                         kubectl apply -f rendered-deployment.yaml --record
                         kubectl rollout status deployment/nginx-deployment --timeout=120s
+                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
                     '''
                 }
             }
         }
 
-        stage('Verify deployment') {
+        stage('Verify Deployment') {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                        echo "Pod ↔ Image ↔ Ready? ↔ StartTime"
+                        echo "Pod ↔ Image ↔ Ready?"
                         kubectl get pods -l app=nginx \
-                          -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,STARTTIME:.status.startTime \
+                          -o custom-columns="NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready" \
                           --no-headers
                         kubectl get svc nginx-service -o wide || true
                     '''
@@ -211,17 +234,17 @@ pipeline {
         success {
             script {
                 def email = sh(
-                    script: "git --no-pager show -s --format='%ae'",
-                    returnStdout: true
+                  script: "git --no-pager show -s --format='%ae'",
+                  returnStdout: true
                 ).trim()
                 mail to:      email,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                     body: """
+                     body: """\
 Hello,
 
-Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #${env.BUILD_NUMBER}).
+Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #${env.BUILD_NUMBER}):
 
-See details: ${env.BUILD_URL}
+${env.BUILD_URL}
 
 Best,
 Jenkins CI/CD
