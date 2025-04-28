@@ -187,12 +187,11 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                        echo "Verification Time: $(date +'%Y-%m-%d %H:%M:%S')"
+                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                         kubectl get pods -l app=nginx \
                           -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
                           --no-headers
-                        echo "Verification Time: $(date +'%Y-%m-%d %H:%M:%S')"
-                        kubectl get svc nginx-service -o wide || true
+                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                     '''
                 }
             }
