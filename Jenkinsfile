@@ -13,7 +13,7 @@ pipeline {
         M2_HOME         = tool 'Maven 3.8.1'
         SCANNER_HOME    = tool 'sonar-scanner'
         PATH            = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-        DOCKER_CONFIG   = "${WORKSPACE}/.docker"              // isolate Docker config to workspace
+        DOCKER_CONFIG   = "${WORKSPACE}/.docker"
         TRIVY_CACHE_DIR = "/var/lib/jenkins/trivy-cache"
         TRIVY_TEMPLATE  = "/usr/local/share/trivy/templates/html.tpl"
     }
@@ -75,12 +75,12 @@ pipeline {
                     withSonarQubeEnv('sonar') {
                         sh """
                             sonar-scanner \
-                                -Dsonar.projectKey=pipeline-test \
-                                -Dsonar.sources=src/main/java \
-                                -Dsonar.tests=src/test/java \
-                                -Dsonar.java.binaries=target/classes \
-                                -Dsonar.login=\$SONAR_TOKEN \
-                                -Dsonar.exclusions=**/generated/**,**/*.md,**/Dockerfile
+                              -Dsonar.projectKey=pipeline-test \
+                              -Dsonar.sources=src/main/java \
+                              -Dsonar.tests=src/test/java \
+                              -Dsonar.java.binaries=target/classes \
+                              -Dsonar.login=\$SONAR_TOKEN \
+                              -Dsonar.exclusions=**/generated/**,**/*.md,**/Dockerfile
                         """
                     }
                 }
@@ -108,89 +108,59 @@ pipeline {
         }
 
         stage('Build & Push Docker image') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            sh '''
-                echo "$DOCKER_PASS" | docker login --username "$DOCKER_USER" --password-stdin
-                docker build -t "$DOCKER_USER/boardgame:${BUILD_NUMBER}" .
-                docker push "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                docker tag "$DOCKER_USER/boardgame:${BUILD_NUMBER}" "$DOCKER_USER/boardgame:latest"
-                docker push "$DOCKER_USER/boardgame:latest"
-            '''
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        docker.withRegistry('', 'docker-cred') {
+                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            img.push()
+                            img.push('latest')
+                        }
+                    }
+                }
+            }
         }
-    }
-}
 
-        stage('Trivy Config-Only Scan') {
+
+        stage('Trivy Vulnerability Scan (HTML)') {
+            options { timeout(time: 15, unit: 'MINUTES') }
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'IGNORED'
                 )]) {
-                    sh '''
+                    sh """
                         trivy image \
-                            --scanners config \
-                            --format template --template "${TRIVY_TEMPLATE}" \
-                            --scanner vuln \
-                            --exit-code 0 \
-                            --timeout 15m \
-                            -o trivy-config-report.html \
-                            "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                    '''
+                          --scanners vuln,secret \
+                          --format template \
+                          --template \"${TRIVY_TEMPLATE}\" \
+                          --exit-code 0 \
+                          --timeout 15m \
+                          -o trivy-vuln-report.html \
+                          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
+                    """
                 }
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir:   '.',
-                        reportFiles:'trivy-config-report.html',
-                        reportName: 'Trivy Config Scan',
-                        keepAll:     true,
-                        alwaysLinkToLastBuild: true
-                    ]
+                    archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
+                    script {
+                        publishHTML target: [
+                            reportDir:             '.',
+                            reportFiles:          'trivy-vuln-report.html',
+                            reportName:           'Trivy Vulnerability Scan (HTML)',
+                            keepAll:              true,
+                            alwaysLinkToLastBuild: true
+                        ]
+                    }
                 }
             }
         }
-
-        stage('Trivy HTML Report') {
-  steps {
-    withCredentials([usernamePassword(
-      credentialsId: 'docker-cred',
-      usernameVariable: 'DOCKER_USER',
-      passwordVariable: 'IGNORED'
-    )]) {
-      sh '''
-        trivy image \
-          --scanners vuln,secret \
-          --format template \
-          --template "@/usr/local/share/trivy/templates/html.tpl" \
-          --exit-code 0 \
-          --timeout 15m \
-          -o trivy-vuln-report.html \
-          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-      '''
-    }
-  }
-  post {
-    always {
-      archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
-      publishHTML target: [
-        reportDir:   '.',
-        reportFiles:'trivy-vuln-report.html',
-        reportName: 'Trivy Vulnerability Scan (HTML)',
-        keepAll:     true,
-        alwaysLinkToLastBuild: true
-      ]
-    }
-  }
-}
-
 
         stage('Render manifest') {
             steps {
@@ -200,9 +170,9 @@ pipeline {
                     passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                        export IMG_TAG="${DOCKER_USER}/boardgame:${BUILD_NUMBER}"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                            > rendered-deployment.yaml
+                                  > rendered-deployment.yaml
                     '''
                 }
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
@@ -226,7 +196,7 @@ pipeline {
                     sh '''
                         echo "Pod ↔ Image ↔ Ready?"
                         kubectl get pods -l app=nginx \
-                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready' \
+                          -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready \
                           --no-headers
                         kubectl get svc nginx-service -o wide || true
                     '''
