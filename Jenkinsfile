@@ -120,7 +120,7 @@ pipeline {
 
         stage('Trivy Config-Only Scan') {
             options {
-                timeout(time: 5, unit: 'MINUTES')
+                timeout(time: 30, unit: 'MINUTES')
             }
             steps {
                 withCredentials([usernamePassword(
@@ -132,7 +132,7 @@ pipeline {
                         trivy image \
                           --scanners misconfig \
                           --format table \
-                          --timeout 5m \
+                          --timeout 30m \
                           --exit-code 0 \
                           -o trivy-misconfig-report.html \
                           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
