@@ -137,8 +137,9 @@ pipeline {
                         trivy image \
                             --scanners config \
                             --format template --template "${TRIVY_TEMPLATE}" \
+                            --scanner vuln
                             --exit-code 0 \
-                            --timeout 5m \
+                            --timeout 15m \
                             -o trivy-config-report.html \
                             "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                     '''
