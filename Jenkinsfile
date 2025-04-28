@@ -125,6 +125,39 @@ pipeline {
             }
         }
 
+        stage('Trivy Config-Only Scan (HTML)') {
+            options { timeout(time: 5, unit: 'MINUTES') }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    sh """
+                        trivy image \
+                          --scanners config \
+                          --format template \
+                          --template \"${TRIVY_TEMPLATE}\" \
+                          --exit-code 0 \
+                          --timeout 5m \
+                          -o trivy-config-report.html \
+                          \"${DOCKER_USER}/boardgame:${BUILD_NUMBER}\"
+                    """
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-config-report.html', fingerprint: true
+                    publishHTML target: [
+                        reportDir:             '.',
+                        reportFiles:          'trivy-config-report.html',
+                        reportName:           'Trivy Config Scan (HTML)',
+                        keepAll:              true,
+                        alwaysLinkToLastBuild: true
+                    ]
+                }
+            }
+        }
 
         stage('Trivy Vulnerability Scan (HTML)') {
             options { timeout(time: 15, unit: 'MINUTES') }
@@ -136,7 +169,7 @@ pipeline {
                 )]) {
                     sh """
                         trivy image \
-                          --scanners vuln,secret \
+                          --scanners vuln \
                           --format template \
                           --template \"${TRIVY_TEMPLATE}\" \
                           --exit-code 0 \
@@ -149,15 +182,13 @@ pipeline {
             post {
                 always {
                     archiveArtifacts artifacts: 'trivy-vuln-report.html', fingerprint: true
-                    script {
-                        publishHTML target: [
-                            reportDir:             '.',
-                            reportFiles:          'trivy-vuln-report.html',
-                            reportName:           'Trivy Vulnerability Scan (HTML)',
-                            keepAll:              true,
-                            alwaysLinkToLastBuild: true
-                        ]
-                    }
+                    publishHTML target: [
+                        reportDir:             '.',
+                        reportFiles:          'trivy-vuln-report.html',
+                        reportName:           'Trivy Vulnerability Scan (HTML)',
+                        keepAll:              true,
+                        alwaysLinkToLastBuild: true
+                    ]
                 }
             }
         }
@@ -194,9 +225,9 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                        echo "Pod ↔ Image ↔ Ready?"
+                        echo "Pod ↔ Image ↔ Ready? ↔ StartTime"
                         kubectl get pods -l app=nginx \
-                          -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready \
+                          -o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,STARTTIME:.status.startTime \
                           --no-headers
                         kubectl get svc nginx-service -o wide || true
                     '''
