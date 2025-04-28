@@ -136,7 +136,7 @@ pipeline {
                     sh '''
                         trivy image \
                             --scanners config \
-                            --format html \
+                            --format template --template "${TRIVY_TEMPLATE}" \
                             --exit-code 0 \
                             --timeout 5m \
                             -o trivy-config-report.html \
