@@ -119,39 +119,34 @@ pipeline {
         }
 
         stage('Trivy Config-Only Scan') {
-            options {
-                timeout(time: 30, unit: 'MINUTES')
-            }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    sh '''
-                        trivy image \
-                          --scanners misconfig \
-                          --format table \
-                          --timeout 30m \
-                          --exit-code 0 \
-                          -o trivy-misconfig-report.html \
-                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                    '''
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: 'trivy-misconfig-report.html', fingerprint: true
-                    publishHTML target: [
-                        reportDir:   '.',
-                        reportFiles:'trivy-misconfig-report.html',
-                        reportName: 'Trivy Misconfig Scan',
-                        keepAll:     true,
-                        alwaysLinkToLastBuild: true
-                    ]
-                }
-            }
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-cred',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'IGNORED'
+        )]) {
+            sh '''
+                # Scan your built image for misconfigurations only
+                trivy image \
+                  --scanners misconfig \
+                  --format table \
+                  --timeout 30m \
+                  --exit-code 0 \
+                  -o trivy-misconfig-report.html \
+                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+
+                # Additionally scan golang:1.12-alpine and save report
+                trivy image \
+                  --format table \
+                  -o trivy-golang-report.html \
+                  golang:1.12-alpine
+            '''
         }
+    }
+}
 
         stage('Render manifest') {
             steps {
