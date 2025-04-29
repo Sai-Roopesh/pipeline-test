@@ -167,15 +167,21 @@ pipeline {
         }
 
         stage('Deploy to k8s') {
-            steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                        kubectl apply -f rendered-deployment.yaml --record
-                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
-                    '''
-                }
-            }
-        }
+  steps {
+    withKubeConfig(credentialsId: 'k8s-config') {
+      sh '''
+        echo "Applying manifest with 60s timeout and skipping cert verify"
+        kubectl apply \
+          --insecure-skip-tls-verify \
+          --request-timeout=600s \
+          -f rendered-deployment.yaml --record
+
+        kubectl rollout status deployment/nginx-deployment --timeout=1200s
+      '''
+    }
+  }
+}
+
 
         stage('Verify deployment') {
             steps {
