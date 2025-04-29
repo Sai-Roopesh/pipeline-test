@@ -132,10 +132,9 @@ pipeline {
                 # Scan your built image for misconfigurations only
                 trivy image \
                   --scanners misconfig \
-                  --format table \
+                  --format template --template "@contrib/html.tpl" -o trivy-misconfig-report.html
                   --timeout 30m \
                   --exit-code 0 \
-                  -o trivy-misconfig-report.html \
                   "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
                 # Additionally scan golang:1.12-alpine and save report
