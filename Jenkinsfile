@@ -132,7 +132,7 @@ pipeline {
                 # Scan your built image for misconfigurations only
                 trivy image \
                   --scanners misconfig \
-                  --format template --template "@contrib/html.tpl" -o trivy-misconfig-report.html
+                  --format template --template "@contrib/html.tpl" -o trivy-misconfig-report.html \
                   --timeout 30m \
                   --exit-code 0 \
                   "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
