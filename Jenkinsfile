@@ -141,7 +141,7 @@ pipeline {
                 # Additionally scan golang:1.12-alpine and save report
                 trivy image \
                   --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
-                  --exit-code 0
+                  --exit-code 0 \
                   golang:1.12-alpine
             '''
         }
