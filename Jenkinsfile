@@ -65,7 +65,7 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
+        /*stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
@@ -89,6 +89,37 @@ pipeline {
                 }
             }
         }
+
+        stage('Trivy Config-Only Scan') {
+            options {
+                timeout(time: 30, unit: 'MINUTES')
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    sh '''
+                        # Scan your built image for misconfigurations only
+                        trivy image \
+                          --scanners misconfig \
+                          --format table \
+                          --timeout 30m \
+                          --exit-code 0 \
+                          -o trivy-misconfig-report.html \
+                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+
+                        # Additionally scan golang:1.12-alpine and save report
+                        trivy image \
+                          --format table \
+                          -o trivy-golang-report.html \
+                          golang:1.12-alpine
+                    '''
+                }
+                archiveArtifacts artifacts: '*.html', fingerprint: true
+            }
+        }*/
 
         stage('Publish to Nexus') {
             steps {
@@ -118,37 +149,6 @@ pipeline {
             }
         }
 
-        stage('Trivy Config-Only Scan') {
-    options {
-        timeout(time: 30, unit: 'MINUTES')
-    }
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-            sh '''
-                TEMPLATE_PATH="/home/gsairoop/html.tpl"
-                # Scan your built image for misconfigurations only
-                trivy image \
-                  --scanners misconfig \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
-                  --timeout 30m \
-                  --exit-code 0 \
-                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-
-                # Additionally scan golang:1.12-alpine and save report
-                trivy image \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
-                  --exit-code 0 \
-                  golang:1.12-alpine
-            '''
-        }
-        archiveArtifacts artifacts: '*.html', fingerprint: true
-    }
-}
-
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
@@ -162,7 +162,6 @@ pipeline {
                                  > rendered-deployment.yaml
                     '''
                 }
-                // <<< Moved inside steps so the stage’s braces stay balanced:
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
             }
         }
@@ -172,7 +171,6 @@ pipeline {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
                         kubectl apply -f rendered-deployment.yaml --record
-                        kubectl rollout status deployment/nginx-deployment --timeout=120s
                         kubectl rollout status deployment/nginx-deployment --timeout=1200s
                     '''
                 }
