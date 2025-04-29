@@ -172,7 +172,7 @@ pipeline {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
                         kubectl apply -f rendered-deployment.yaml --record
-                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
+                        kubectl rollout status deployment/nginx-deployment --timeout=120s
                         kubectl rollout status deployment/nginx-deployment --timeout=1200s
                     '''
                 }
