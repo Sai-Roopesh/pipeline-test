@@ -41,5 +41,4 @@ If you don’t receive the confirmation email, don’t worry! Simply contact our
 If you have any issues or questions, feel free to raise an issue in the repository or reach out to our team directly — we’re always happy to assist you! 🤝
 
 hello
-world
-world
+universe
