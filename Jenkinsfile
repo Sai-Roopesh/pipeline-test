@@ -132,22 +132,25 @@ pipeline {
         }
 
         stage('Build & Push Docker image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-                            img.push('latest')
-                        }
-                    }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-cred',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'DOCKER_PASS'
+        )]) {
+            script {
+                sh "docker rmi -f ${DOCKER_USER}/boardgame:${BUILD_NUMBER} || true"
+                sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
+
+                docker.withRegistry('', 'docker-cred') {
+                    def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                    img.push()
+                    img.push('latest')
                 }
             }
         }
+    }
+}
 
         stage('Render manifest') {
             steps {
@@ -184,18 +187,21 @@ pipeline {
 
 
         stage('Verify deployment') {
-            steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
-                        kubectl get pods -l app=nginx \
-                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
-                          --no-headers
-                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
-                    '''
-                }
-            }
+    steps {
+        withKubeConfig(credentialsId: 'k8s-config') {
+            sh '''
+                echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
+                kubectl get pods -l app=nginx \
+                  -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
+                  --no-headers
+                echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
+
+                echo "Starting port-forward on port 15000"
+                nohup kubectl port-forward deployment/java-app 15000:15000 --address 0.0.0.0 > port-forward.log 2>&1 &
+            '''
         }
+    }
+}
 
     } // end stages
 
