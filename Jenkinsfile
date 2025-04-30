@@ -139,10 +139,7 @@ pipeline {
             passwordVariable: 'DOCKER_PASS'
         )]) {
             script {
-                sh "docker rmi -f ${DOCKER_USER}/boardgame:${BUILD_NUMBER} || true"
-                sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
-
-                docker.withRegistry('', 'docker-cred') {
+                    docker.withRegistry('', 'docker-cred') {
                     def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
                     img.push()
                     img.push('latest')
