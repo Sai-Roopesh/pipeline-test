@@ -164,7 +164,7 @@ pipeline {
                     passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                        export IMG_TAG="$DOCKER_USER/boardgame:v1"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
                                  > rendered-deployment.yaml
                     '''
