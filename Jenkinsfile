@@ -114,35 +114,51 @@ pipeline {
             }
         }
 
+        stage('Prep Trivy DB') {
+            steps {
+                // cache the vulnerability DB once per build agent
+                sh 'trivy image --download-db-only --cache-dir "$HOME/.cache/trivy"'
+            }
+        }
+
         stage('Container Scanning') {
             options {
                 timeout(time: 30, unit: 'MINUTES')
             }
             steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-            sh '''
-                TEMPLATE_PATH="/home/gsairoop/html.tpl"
-                # Scan your built image for misconfigurations only
-                trivy image \
-                  --scanners misconfig \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
-                  --timeout 30m \
-                  --exit-code 0 \
-                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-
-                # Additionally scan golang:1.12-alpine and save report
-                trivy image \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
-                  --exit-code 0 \
-                  golang:1.12-alpine
-            '''
-        }
-        archiveArtifacts artifacts: '*.html', fingerprint: true
-    }
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    // 1) Vulnerability scan of your built image
+                    sh '''
+                        TEMPLATE_PATH="/home/gsairoop/html.tpl"
+                        trivy image \
+                          --scanners vuln \
+                          --cache-dir "$HOME/.cache/trivy" \
+                          --skip-db-update \
+                          --format template --template "$TEMPLATE_PATH" \
+                          -o trivy-vuln-report.html \
+                          --exit-code 0 \
+                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                    '''
+                    // 2) Optional: pull & scan a public base image
+                    sh '''
+                        docker pull golang:1.12-alpine
+                        TEMPLATE_PATH="/home/gsairoop/html.tpl"
+                        trivy image \
+                          --scanners vuln \
+                          --cache-dir "$HOME/.cache/trivy" \
+                          --skip-db-update \
+                          --format template --template "$TEMPLATE_PATH" \
+                          -o trivy-golang-report.html \
+                          --exit-code 0 \
+                          golang:1.12-alpine
+                    '''
+                }
+                archiveArtifacts artifacts: '*.html', fingerprint: true
+            }
         }
 
         stage('Rendering Kubernetes deployment Manifest') {
