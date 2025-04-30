@@ -187,6 +187,28 @@ stage('Render manifest') {
   }
 }
 
+            stage('Port-Forward & Smoke Test') {
+      steps {
+        withKubeConfig(credentialsId: 'k8s-config') {
+          sh '''
+            # Start port-forward in background
+            kubectl port-forward deployment/java-app 15000:15000 --address 0.0.0.0 &
+            PF_PID=$!
+
+            # Ensure cleanup even on failure
+            trap "kill $PF_PID" EXIT
+
+            # Give it a moment to establish
+            sleep 5
+
+            # Hit the endpoint via the tunnel
+            echo "Smoke test via localhost:15000 → $(curl -sf http://localhost:15000/)"
+          '''
+        }
+      }
+    }
+
+
 
         stage('Verify deployment') {
             steps {
