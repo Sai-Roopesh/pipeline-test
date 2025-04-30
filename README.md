@@ -1,4 +1,4 @@
-# Enterprise Grade Pipeline 
+# Enterprise Grade Pipeline
 
 Welcome, awesome developer! 👋
 
@@ -9,16 +9,20 @@ If you're here, you're looking to deploy your application on a Kubernetes cluste
 Follow these simple steps to deploy your application:
 
 ### 1. Fork This Repository
+
 Not sure how to fork? It's super easy — [Google it](https://www.google.com/search?q=how+to+fork+github+repository) and you'll find plenty of guides! 😉
 
 ### 2. Push Your Code
+
 Add the application you want to deploy to your forked repository.  
 Make sure your code is **production-ready** before you proceed.
 
 ### 3. Create a Pull Request
+
 Head to your forked repository and create a Pull Request (PR).
 
 In your PR comment, please include:
+
 - A short, meaningful description of what you are deploying.
 - Your contact details (so we can reach out to you if needed).
 
@@ -42,3 +46,5 @@ If you have any issues or questions, feel free to raise an issue in the reposito
 
 hello
 universe
+
+hello
