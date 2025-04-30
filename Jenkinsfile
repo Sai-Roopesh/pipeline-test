@@ -107,7 +107,7 @@ pipeline {
                         docker.withRegistry('', 'docker-cred') {
                             def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
                             img.push()
-                            img.push('latest')
+                
                         }
                     }
                 }
@@ -143,19 +143,7 @@ pipeline {
                           --exit-code 0 \
                           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                     '''
-                    // 2) Optional: pull & scan a public base image
-                    sh '''
-                        docker pull golang:1.12-alpine
-                        TEMPLATE_PATH="/home/gsairoop/html.tpl"
-                        trivy image \
-                          --scanners vuln \
-                          --cache-dir "$HOME/.cache/trivy" \
-                          --skip-db-update \
-                          --format template --template "$TEMPLATE_PATH" \
-                          -o trivy-golang-report.html \
-                          --exit-code 0 \
-                          golang:1.12-alpine
-                    '''
+
                 }
                 archiveArtifacts artifacts: '*.html', fingerprint: true
             }
