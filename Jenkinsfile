@@ -145,9 +145,9 @@ pipeline {
         sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
 
         docker.withRegistry('', 'docker-cred') {
-          // Build & tag as v1
-          def img = docker.build("${DOCKER_USER}/boardgame:v1")
-          img.push()          // push v1
+    
+          def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+          img.push()         
         }
       }
     }
