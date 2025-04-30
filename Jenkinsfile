@@ -65,7 +65,7 @@ pipeline {
             }
         }
 
-        /*stage('SonarQube Analysis') {
+        stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
@@ -119,7 +119,7 @@ pipeline {
                 }
                 archiveArtifacts artifacts: '*.html', fingerprint: true
             }
-        }*/
+        }
 
         stage('Publish to Nexus') {
             steps {
@@ -132,80 +132,60 @@ pipeline {
         }
 
         stage('Build & Push Docker image') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'DOCKER_PASS'
-        )]) {
-            script {
-                    docker.withRegistry('', 'docker-cred') {
-                    def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                    img.push()
-                    img.push('latest')
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        sh "docker rmi -f ${DOCKER_USER}/boardgame:${BUILD_NUMBER} || true"
+                        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
+
+                        docker.withRegistry('', 'docker-cred') {
+                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            img.push()
+                            img.push('latest')
+                        }
+                    }
                 }
             }
         }
-    }
-}
 
-stage('Render manifest') {
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-            script {
-                def imageTag = "${DOCKER_USER}/boardgame:${BUILD_NUMBER}"
-                sh """
-                    export IMG_TAG="${imageTag}"
-                    envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
-                """
+        stage('Render manifest') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    script {
+                        def imageTag = "${DOCKER_USER}/boardgame:${BUILD_NUMBER}"
+                        sh """
+                            export IMG_TAG="${imageTag}"
+                            envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
+                        """
+                    }
+                }
+                archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
             }
         }
-        archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
-    }
-}
 
         stage('Deploy to k8s') {
-  steps {
-    withKubeConfig(credentialsId: 'k8s-config') {
-      sh '''
-        echo "Applying manifest with 60s timeout and skipping cert verify"
-        kubectl apply \
-          --insecure-skip-tls-verify \
-          --request-timeout=600s \
-          -f rendered-deployment.yaml --record
+            steps {
+                withKubeConfig(credentialsId: 'k8s-config') {
+                    sh '''
+                        echo "Applying manifest with 60s timeout and skipping cert verify"
+                        kubectl apply \
+                          --insecure-skip-tls-verify \
+                          --request-timeout=600s \
+                          -f rendered-deployment.yaml --record
 
-        kubectl rollout status deployment/nginx-deployment --timeout=1200s
-      '''
-    }
-  }
-}
-
-            stage('Port-Forward & Smoke Test') {
-      steps {
-        withKubeConfig(credentialsId: 'k8s-config') {
-          sh '''
-            # Start port-forward in background
-            kubectl port-forward deployment/java-app 15000:15000 --address 0.0.0.0 &
-            PF_PID=$!
-
-            # Ensure cleanup even on failure
-            trap "kill $PF_PID" EXIT
-
-            # Give it a moment to establish
-            sleep 5
-
-            # Hit the endpoint via the tunnel
-            echo "Smoke test via localhost:15000 → $(curl -sf http://localhost:15000/)"
-          '''
+                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
+                    '''
+                }
+            }
         }
-      }
-    }
-
-
 
         stage('Verify deployment') {
             steps {
