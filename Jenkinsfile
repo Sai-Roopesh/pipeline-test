@@ -119,32 +119,30 @@ pipeline {
                 timeout(time: 30, unit: 'MINUTES')
             }
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    sh '''
-                        # Scan your built image for HIGH & CRITICAL misconfigs only
-                        trivy image \
-                          --scanners misconfig \
-                          --format table \
-                          --severity HIGH,CRITICAL \
-                          --timeout 30m \
-                          --exit-code 0 \
-                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-cred',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'IGNORED'
+        )]) {
+            sh '''
+                TEMPLATE_PATH="/home/gsairoop/html.tpl"
+                # Scan your built image for misconfigurations only
+                trivy image \
+                  --scanners misconfig \
+                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
+                  --timeout 30m \
+                  --exit-code 0 \
+                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
-                        # Additionally scan golang:1.12-alpine
-                        trivy image \
-                          --scanners misconfig \
-                          --format table \
-                          --severity HIGH,CRITICAL \
-                          --exit-code 0 \
-                          golang:1.12-alpine
-                    '''
-                }
-                archiveArtifacts artifacts: '*.html', fingerprint: true
-            }
+                # Additionally scan golang:1.12-alpine and save report
+                trivy image \
+                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
+                  --exit-code 0 \
+                  golang:1.12-alpine
+            '''
+        }
+        archiveArtifacts artifacts: '*.html', fingerprint: true
+    }
         }
 
         stage('Rendering Kubernetes deployment Manifest') {
