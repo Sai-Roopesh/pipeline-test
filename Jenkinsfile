@@ -64,7 +64,6 @@ pipeline {
                 '''
             }
         }
-        
 
         stage('SonarQube Analysis') {
             steps {
@@ -83,7 +82,13 @@ pipeline {
             }
         }
 
-        
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
 
         stage('Publish to Nexus') {
             steps {
@@ -95,7 +100,25 @@ pipeline {
             }
         }
 
-  stage('Trivy Config-Only Scan') {
+        stage('Build & Push Docker image') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        docker.withRegistry('', 'docker-cred') {
+                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            img.push()
+                            img.push('latest')
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Trivy Config-Only Scan') {
     options {
         timeout(time: 30, unit: 'MINUTES')
     }
@@ -126,30 +149,6 @@ pipeline {
     }
 }
 
-
-        stage('Build & Push Docker image') {
-  steps {
-    withCredentials([usernamePassword(
-        credentialsId: 'docker-cred',
-        usernameVariable: 'DOCKER_USER',
-        passwordVariable: 'DOCKER_PASS'
-    )]) {
-      script {
-        sh "docker rmi -f ${DOCKER_USER}/boardgame:v1 || true"
-        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
-
-        docker.withRegistry('', 'docker-cred') {
-    
-          def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-          img.push()         
-        }
-      }
-    }
-  }
-}
-
-
-     
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
@@ -158,7 +157,7 @@ pipeline {
                     passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:v1"
+                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
                                  > rendered-deployment.yaml
                     '''
