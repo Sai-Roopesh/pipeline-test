@@ -8,8 +8,10 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppTest {
 
@@ -38,15 +40,28 @@ class AppTest {
     }
 
     @Test
-    void helloEndpointReturnsHelloJenkins() throws Exception {
+    void helloEndpointReturnsFunkyHtml() throws Exception {
         URL url = new URL("http://localhost:15000/");
         HttpURLConnection conn = (HttpURLConnection) url.openConnection();
         conn.setRequestMethod("GET");
 
+        // verify status code
+        int status = conn.getResponseCode();
+        assertEquals(200, status, "Expected HTTP 200 OK");
+
+        // verify Content-Type header
+        String contentType = conn.getHeaderField("Content-Type");
+        assertEquals("text/html; charset=UTF-8", contentType);
+
+        // read entire body
+        String body;
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(conn.getInputStream()))) {
-            String response = reader.readLine();
-            assertEquals("Hello, Jenkins!", response);
+            body = reader.lines().collect(Collectors.joining("\n"));
         }
+
+        // assert that the H1 heading is present
+        assertTrue(body.contains("<h1>Hello, Jenkins!</h1>"),
+                "Response should contain the main heading");
     }
 }
