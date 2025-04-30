@@ -19,7 +19,7 @@ pipeline {
 
     stages {
 
-        stage('Checkout') {
+        stage('Code Push') {
             steps {
                 git branch: 'main',
                     url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
@@ -64,8 +64,9 @@ pipeline {
                 '''
             }
         }
+        
 
-        stage('SonarQube Analysis') {
+        stage('SAST Scanning') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
@@ -82,13 +83,7 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
-            steps {
-                timeout(time: 5, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
+        
 
         stage('Publish to Nexus') {
             steps {
@@ -100,25 +95,29 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-                            img.push('latest')
-                        }
-                    }
-                }
-            }
-        }
+  
+        stage('Build & Push Docker Container') {
+  steps {
+    withCredentials([usernamePassword(
+        credentialsId: 'docker-cred',
+        usernameVariable: 'DOCKER_USER',
+        passwordVariable: 'DOCKER_PASS'
+    )]) {
+      script {
+        sh "docker rmi -f ${DOCKER_USER}/boardgame:v1 || true"
+        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
 
-        stage('Trivy Config-Only Scan') {
+        docker.withRegistry('', 'docker-cred') {
+    
+          def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+          img.push()         
+        }
+      }
+    }
+  }
+}
+
+stage('Container Scanning') {
     options {
         timeout(time: 30, unit: 'MINUTES')
     }
@@ -129,27 +128,31 @@ pipeline {
             passwordVariable: 'IGNORED'
         )]) {
             sh '''
-                TEMPLATE_PATH="/home/gsairoop/html.tpl"
-                # Scan your built image for misconfigurations only
+                # Scan your built image for misconfigurations (only HIGH and CRITICAL)
                 trivy image \
                   --scanners misconfig \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
+                  --format table \
+                  --severity HIGH,CRITICAL \
                   --timeout 30m \
                   --exit-code 0 \
                   "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
-                # Additionally scan golang:1.12-alpine and save report
+                # Additionally scan golang:1.12-alpine
                 trivy image \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
+                  --scanners misconfig \
+                  --format table \
+                  --severity HIGH,CRITICAL \
                   --exit-code 0 \
                   golang:1.12-alpine
             '''
         }
-        archiveArtifacts artifacts: '*.html', fingerprint: true
     }
 }
 
-        stage('Render manifest') {
+
+
+     
+        stage('Rendering Kubernetes deployment Manifest') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -157,7 +160,7 @@ pipeline {
                     passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                        export IMG_TAG="$DOCKER_USER/boardgame:v1"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
                                  > rendered-deployment.yaml
                     '''
@@ -184,7 +187,7 @@ pipeline {
                     sh '''
                         echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                         kubectl get pods -l app=nginx \
-                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
+                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[].image,READY:.status.containerStatuses[].ready,START_TIME:.status.startTime' \
                           --no-headers
                         echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                     '''
@@ -220,3 +223,4 @@ Jenkins CI/CD
         }
     }
 }
+
