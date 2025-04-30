@@ -64,7 +64,6 @@ pipeline {
                 '''
             }
         }
-        
 
         stage('SAST Scanning') {
             steps {
@@ -83,8 +82,6 @@ pipeline {
             }
         }
 
-        
-
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -95,63 +92,61 @@ pipeline {
             }
         }
 
-  
         stage('Build & Push Docker Container') {
-  steps {
-    withCredentials([usernamePassword(
-        credentialsId: 'docker-cred',
-        usernameVariable: 'DOCKER_USER',
-        passwordVariable: 'DOCKER_PASS'
-    )]) {
-      script {
-        sh "docker rmi -f ${DOCKER_USER}/boardgame:v1 || true"
-        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        // clean up old tags
+                        sh "docker rmi -f ${DOCKER_USER}/boardgame:${BUILD_NUMBER} || true"
+                        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
 
-        docker.withRegistry('', 'docker-cred') {
-    
-          def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-          img.push()         
+                        docker.withRegistry('', 'docker-cred') {
+                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            img.push()
+                            img.push('latest')
+                        }
+                    }
+                }
+            }
         }
-      }
-    }
-  }
-}
 
-stage('Container Scanning') {
-    options {
-        timeout(time: 30, unit: 'MINUTES')
-    }
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-            sh '''
-                # Scan your built image for misconfigurations (only HIGH and CRITICAL)
-                trivy image \
-                  --scanners misconfig \
-                  --format table \
-                  --severity HIGH,CRITICAL \
-                  --timeout 30m \
-                  --exit-code 0 \
-                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+        stage('Container Scanning') {
+            options {
+                timeout(time: 30, unit: 'MINUTES')
+            }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    sh '''
+                        # Scan your built image for HIGH & CRITICAL misconfigs only
+                        trivy image \
+                          --scanners misconfig \
+                          --format table \
+                          --severity HIGH,CRITICAL \
+                          --timeout 30m \
+                          --exit-code 0 \
+                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
-                # Additionally scan golang:1.12-alpine
-                trivy image \
-                  --scanners misconfig \
-                  --format table \
-                  --severity HIGH,CRITICAL \
-                  --exit-code 0 \
-                  golang:1.12-alpine
-            '''
+                        # Additionally scan golang:1.12-alpine
+                        trivy image \
+                          --scanners misconfig \
+                          --format table \
+                          --severity HIGH,CRITICAL \
+                          --exit-code 0 \
+                          golang:1.12-alpine
+                    '''
+                }
+                archiveArtifacts artifacts: '*.html', fingerprint: true
+            }
         }
-    }
-}
 
-
-
-     
         stage('Rendering Kubernetes deployment Manifest') {
             steps {
                 withCredentials([usernamePassword(
@@ -160,12 +155,11 @@ stage('Container Scanning') {
                     passwordVariable: 'IGNORED'
                 )]) {
                     sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:v1"
+                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                         envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
                                  > rendered-deployment.yaml
                     '''
                 }
-                // <<< Moved inside steps so the stage’s braces stay balanced:
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
             }
         }
@@ -223,4 +217,3 @@ Jenkins CI/CD
         }
     }
 }
-
