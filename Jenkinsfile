@@ -64,6 +64,7 @@ pipeline {
                 '''
             }
         }
+        /*
 
         stage('SonarQube Analysis') {
             steps {
@@ -88,7 +89,7 @@ pipeline {
                     waitForQualityGate abortPipeline: true
                 }
             }
-        }
+        } */
 
         stage('Publish to Nexus') {
             steps {
@@ -100,25 +101,7 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-                            img.push('latest')
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('Trivy Config-Only Scan') {
+         /*  stage('Trivy Config-Only Scan') {
     options {
         timeout(time: 30, unit: 'MINUTES')
     }
@@ -147,8 +130,32 @@ pipeline {
         }
         archiveArtifacts artifacts: '*.html', fingerprint: true
     }
+} */
+
+
+        stage('Build & Push Docker image') {
+  steps {
+    withCredentials([usernamePassword(
+        credentialsId: 'docker-cred',
+        usernameVariable: 'DOCKER_USER',
+        passwordVariable: 'DOCKER_PASS'
+    )]) {
+      script {
+        sh "docker rmi -f ${DOCKER_USER}/boardgame:v1 || true"
+        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
+
+        docker.withRegistry('', 'docker-cred') {
+          // Build & tag as v1
+          def img = docker.build("${DOCKER_USER}/boardgame:v1")
+          img.push()          // push v1
+        }
+      }
+    }
+  }
 }
 
+
+     
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
