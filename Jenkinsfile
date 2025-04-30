@@ -135,11 +135,11 @@ pipeline {
                     sh '''
                         TEMPLATE_PATH="/home/gsairoop/html.tpl"
                         trivy image \
-                          --scanners vuln \
+                          --scanners misconfig \
                           --cache-dir "$HOME/.cache/trivy" \
                           --skip-db-update \
                           --format template --template "$TEMPLATE_PATH" \
-                          -o trivy-vuln-report.html \
+                          -o trivy-misconfig-report.html \
                           --exit-code 0 \
                           "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                     '''
