@@ -170,12 +170,20 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                        kubectl apply -f rendered-deployment.yaml --record
-                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
+                        # Server-side apply for faster, merge-on-server, and bail after 2m
+                        kubectl apply --server-side \
+                                      --request-timeout=2m \
+                                      -f rendered-deployment.yaml \
+                                      --record
+
+                        # Wait up to 20m for rollout
+                        kubectl rollout status deployment/nginx-deployment \
+                                              --timeout=1200s
                     '''
                 }
             }
         }
+
 
         stage('Verify deployment') {
             steps {
