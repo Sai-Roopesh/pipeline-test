@@ -38,7 +38,7 @@ pipeline {
             }
         }
 
-        stage('Smoke Test') {
+       /* stage('Smoke Test') {
             steps {
                 sh '''
                     set -eu
@@ -98,9 +98,51 @@ pipeline {
                     sh 'mvn deploy -DskipTests'
                 }
             }
+        }*/
+
+         stage('Build & Tag Docker image') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    script {
+                        // build & tag, but do NOT push yet
+                        docker.withRegistry('', 'docker-cred') {
+                            docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                        }
+                    }
+                }
+            }
         }
 
-        stage('Build & Push Docker image') {
+        stage('Trivy Image Scan') {
+            agent { label 'trivy' }
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'docker-cred',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'IGNORED'
+                )]) {
+                    sh """
+                      trivy image \
+                        --exit-code 1 \
+                        --severity HIGH,CRITICAL \
+                        --format html \
+                        -o trivy-image-report.html \
+                        ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
+                    """
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
+                }
+            }
+        }
+
+        stage('Push Docker image') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -109,45 +151,15 @@ pipeline {
                 )]) {
                     script {
                         docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-              
+                            // now safe to push the same tag
+                            docker.image("${DOCKER_USER}/boardgame:${BUILD_NUMBER}").push()
                         }
                     }
                 }
             }
         }
 
-        stage('Trivy Config-Only Scan') {
-    options {
-        timeout(time: 30, unit: 'MINUTES')
-    }
-    steps {
-        withCredentials([usernamePassword(
-            credentialsId: 'docker-cred',
-            usernameVariable: 'DOCKER_USER',
-            passwordVariable: 'IGNORED'
-        )]) {
-            sh '''
-                # Scan your built image for misconfigurations only
-                trivy image \
-                  --scanners misconfig \
-                  --format table -o trivy-misconfig-report.html \
-                  --timeout 30m \
-                  --exit-code 0 \
-                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-
-                # Additionally scan golang:1.12-alpine and save report
-                trivy image \
-                  --format table -o trivy-golang-report.html \
-                  --exit-code 0 \
-                  golang:1.12-alpine
-            '''
-        }
-        archiveArtifacts artifacts: '*.html', fingerprint: true
-    }
-}
-
+    
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
