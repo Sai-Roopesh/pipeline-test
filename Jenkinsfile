@@ -13,6 +13,7 @@ pipeline {
         M2_HOME      = tool 'Maven 3.8.1'
         SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
+        TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache"
     }
 
     triggers { githubPush() }
@@ -127,7 +128,7 @@ pipeline {
           # make sure our cache directory exists
           mkdir -p $TRIVY_CACHE_DIR
           # download the full DB (vuln + secret + misconfig)
-          trivy --cache-dir $TRIVY_CACHE_DIR db update
+          trivy --cache-dir "$TRIVY_CACHE_DIR" db update
         '''
       }
     }
@@ -143,7 +144,7 @@ pipeline {
           sh '''
             trivy image \
               --cache-dir $TRIVY_CACHE_DIR \
-              --timeout 10m \
+              --timeout 30m \
               --exit-code 1 \
               --severity HIGH,CRITICAL \
               --format table \
