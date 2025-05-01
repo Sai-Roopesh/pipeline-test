@@ -129,18 +129,17 @@ pipeline {
             passwordVariable: 'IGNORED'
         )]) {
             sh '''
-                TEMPLATE_PATH="/home/gsairoop/html.tpl"
                 # Scan your built image for misconfigurations only
                 trivy image \
                   --scanners misconfig \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
+                  --format table -o trivy-misconfig-report.html \
                   --timeout 30m \
                   --exit-code 0 \
                   "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
 
                 # Additionally scan golang:1.12-alpine and save report
                 trivy image \
-                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
+                  --format table -o trivy-golang-report.html \
                   --exit-code 0 \
                   golang:1.12-alpine
             '''
