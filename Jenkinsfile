@@ -129,15 +129,15 @@ pipeline {
                       trivy image \
                         --exit-code 1 \
                         --severity HIGH,CRITICAL \
-                        --format html \
-                        -o trivy-image-report.html \
+                        --format table \
+                        -o trivy.txt \
                         ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
                     """
                 }
             }
             post {
                 always {
-                    archiveArtifacts artifacts: 'trivy-image-report.html', fingerprint: true
+                    archiveArtifacts artifacts: 'trivy.txt', fingerprint: true
                 }
             }
         }
