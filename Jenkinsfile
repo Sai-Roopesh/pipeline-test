@@ -13,7 +13,7 @@ pipeline {
         M2_HOME      = tool 'Maven 3.8.1'
         SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-        TRIVY_CACHE_DIR = '/home/jenkins/.trivy-cache'
+      
     }
 
     triggers { githubPush() }
@@ -120,45 +120,46 @@ pipeline {
         }
 
          
+stage('Prepare Trivy DB') {
+  agent { label 'trivy' }
+  steps {
+    sh '''
+      # define cache under the agent user’s home
+      CACHE_DIR="$HOME/.trivy-cache"
+      mkdir -p "$CACHE_DIR"
+      trivy --cache-dir "$CACHE_DIR" db update
+    '''
+  }
+}
 
-       stage('Prepare Trivy DB') {
-      agent { label 'trivy' }
-      steps {
-        sh '''
-          # make sure our cache directory exists
-          mkdir -p $TRIVY_CACHE_DIR
-          # download the full DB (vuln + secret + misconfig)
-          trivy --cache-dir "$TRIVY_CACHE_DIR" db update
-        '''
-      }
+stage('Trivy Image Scan') {
+  agent { label 'trivy' }
+  steps {
+    withCredentials([usernamePassword(
+      credentialsId: 'docker-cred',
+      usernameVariable: 'DOCKER_USER',
+      passwordVariable: 'IGNORED'
+    )]) {
+      sh '''
+        CACHE_DIR="$HOME/.trivy-cache"
+        trivy image \
+          --cache-dir "$CACHE_DIR" \
+          --timeout 30m \
+          --exit-code 1 \
+          --severity HIGH,CRITICAL \
+          --format table \
+          -o trivy.txt \
+          ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
+      '''
     }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'trivy.txt', fingerprint: true
+    }
+  }
+}
 
-    stage('Trivy Image Scan') {
-      agent { label 'trivy' }
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'docker-cred',
-          usernameVariable: 'DOCKER_USER',
-          passwordVariable: 'IGNORED'
-        )]) {
-          sh '''
-            trivy image \
-              --cache-dir $TRIVY_CACHE_DIR \
-              --timeout 30m \
-              --exit-code 1 \
-              --severity HIGH,CRITICAL \
-              --format table \
-              -o trivy.txt \
-              ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
-          '''
-        }
-      }
-      post {
-        always {
-          archiveArtifacts artifacts: 'trivy.txt', fingerprint: true
-        }
-      }
-    }
 
       
     
