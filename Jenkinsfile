@@ -117,7 +117,7 @@ pipeline {
                 }
             }
         }
-/*
+
         stage('Trivy Config-Only Scan') {
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -147,7 +147,7 @@ pipeline {
         archiveArtifacts artifacts: '*.html', fingerprint: true
     }
 }
-*/
+
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
