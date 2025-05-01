@@ -124,13 +124,16 @@ stage('Prepare Trivy DB') {
   agent { label 'trivy' }
   steps {
     sh '''
-      # define cache under the agent user’s home
       CACHE_DIR="$HOME/.trivy-cache"
       mkdir -p "$CACHE_DIR"
-      trivy --cache-dir "$CACHE_DIR" db update
+      # download only the database into the cache
+      trivy image \
+        --download-db-only \
+        --cache-dir "$CACHE_DIR"
     '''
   }
 }
+
 
 stage('Trivy Image Scan') {
   agent { label 'trivy' }
