@@ -100,7 +100,7 @@ pipeline {
             }
         }*/
 
-         stage('Build & Tag Docker image') {
+        stage('Build & Push Docker image') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -108,14 +108,17 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     script {
-                        // build & tag, but do NOT push yet
                         docker.withRegistry('', 'docker-cred') {
-                            docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                            img.push()
+              
                         }
                     }
                 }
             }
         }
+
+         
 
         stage('Trivy Image Scan') {
             agent { label 'trivy' }
@@ -142,23 +145,7 @@ pipeline {
             }
         }
 
-        stage('Push Docker image') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        docker.withRegistry('', 'docker-cred') {
-                            // now safe to push the same tag
-                            docker.image("${DOCKER_USER}/boardgame:${BUILD_NUMBER}").push()
-                        }
-                    }
-                }
-            }
-        }
-
+      
     
         stage('Render manifest') {
             steps {
