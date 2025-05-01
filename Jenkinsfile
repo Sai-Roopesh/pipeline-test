@@ -13,7 +13,7 @@ pipeline {
         M2_HOME      = tool 'Maven 3.8.1'
         SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-        TRIVY_CACHE_DIR = "${WORKSPACE}/.trivy-cache"
+        TRIVY_CACHE_DIR = '/home/jenkins/.trivy-cache'
     }
 
     triggers { githubPush() }
