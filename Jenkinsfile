@@ -122,33 +122,31 @@ pipeline {
             }
         }
 
-        stage('Container Scanning') {
-            options {
-                timeout(time: 30, unit: 'MINUTES')
-            }
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    // 1) Vulnerability scan of your built image
-                    sh '''
-                        TEMPLATE_PATH="/home/gsairoop/html.tpl"
-                        trivy image \
-                          --scanners misconfig \
-                          --cache-dir "$HOME/.cache/trivy" \
-                          --skip-db-update \
-                          --format template --template "$TEMPLATE_PATH" \
-                          -o trivy-misconfig-report.html \
-                          --exit-code 0 \
-                          "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                    '''
-
-                }
-                archiveArtifacts artifacts: '*.html', fingerprint: true
-            }
+        stage('Container Scan') {
+    options {
+        timeout(time: 30, unit: 'MINUTES')
+    }
+    steps {
+        withCredentials([usernamePassword(
+            credentialsId: 'docker-cred',
+            usernameVariable: 'DOCKER_USER',
+            passwordVariable: 'IGNORED'
+        )]) {
+            sh '''
+                TEMPLATE_PATH="/home/gsairoop/html.tpl"
+                # Scan your built image for misconfigurations only
+                trivy image \
+                  --scanners misconfig \
+                  --format template --template "\$TEMPLATE_PATH" -o trivy-misconfig-report.html \
+                  --timeout 30m \
+                  --exit-code 0 \
+                  "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+            '''
         }
+        archiveArtifacts artifacts: '*.html', fingerprint: true
+    }
+}
+
         */
 
         stage('Rendering Kubernetes deployment Manifest') {
