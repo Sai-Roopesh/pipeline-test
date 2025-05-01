@@ -111,13 +111,13 @@ pipeline {
                         docker.withRegistry('', 'docker-cred') {
                             def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
                             img.push()
-                            img.push('latest')
+              
                         }
                     }
                 }
             }
         }
-
+/*
         stage('Trivy Config-Only Scan') {
     options {
         timeout(time: 30, unit: 'MINUTES')
@@ -147,7 +147,7 @@ pipeline {
         archiveArtifacts artifacts: '*.html', fingerprint: true
     }
 }
-
+*/
         stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
