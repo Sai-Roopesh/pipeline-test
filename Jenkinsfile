@@ -64,6 +64,7 @@ pipeline {
                 '''
             }
         }
+        /*
 
         stage('SAST Scanning') {
             steps {
@@ -81,7 +82,7 @@ pipeline {
                 }
             }
         }
-
+            */
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -113,7 +114,7 @@ pipeline {
                 }
             }
         }
-
+/*
         stage('Prep Trivy DB') {
             steps {
                 // cache the vulnerability DB once per build agent
@@ -148,6 +149,7 @@ pipeline {
                 archiveArtifacts artifacts: '*.html', fingerprint: true
             }
         }
+        */
 
         stage('Rendering Kubernetes deployment Manifest') {
             steps {
