@@ -19,7 +19,7 @@ pipeline {
 
     stages {
 
-        stage('Code Push') {
+        stage('Checkout') {
             steps {
                 git branch: 'main',
                     url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
@@ -64,9 +64,8 @@ pipeline {
                 '''
             }
         }
-        /*
 
-        stage('SAST Scanning') {
+        stage('SonarQube Analysis') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
@@ -82,7 +81,15 @@ pipeline {
                 }
             }
         }
-            */
+
+        stage('Quality Gate') {
+            steps {
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+
         stage('Publish to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
@@ -93,7 +100,7 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker Container') {
+        stage('Build & Push Docker image') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -101,28 +108,17 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     script {
-                        // clean up old tags
-                        sh "docker rmi -f ${DOCKER_USER}/boardgame:${BUILD_NUMBER} || true"
-                        sh "docker rmi -f ${DOCKER_USER}/boardgame:latest || true"
-
                         docker.withRegistry('', 'docker-cred') {
                             def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
                             img.push()
-                
+                            img.push('latest')
                         }
                     }
                 }
             }
         }
-/*
-        stage('Prep Trivy DB') {
-            steps {
-                // cache the vulnerability DB once per build agent
-                sh 'trivy image --download-db-only --cache-dir "$HOME/.cache/trivy"'
-            }
-        }
 
-        stage('Container Scan') {
+        stage('Trivy Config-Only Scan') {
     options {
         timeout(time: 30, unit: 'MINUTES')
     }
@@ -141,15 +137,19 @@ pipeline {
                   --timeout 30m \
                   --exit-code 0 \
                   "$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+
+                # Additionally scan golang:1.12-alpine and save report
+                trivy image \
+                  --format template --template "\$TEMPLATE_PATH" -o trivy-golang-report.html \
+                  --exit-code 0 \
+                  golang:1.12-alpine
             '''
         }
         archiveArtifacts artifacts: '*.html', fingerprint: true
     }
 }
 
-        */
-
-        stage('Rendering Kubernetes deployment Manifest') {
+        stage('Render manifest') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -162,6 +162,7 @@ pipeline {
                                  > rendered-deployment.yaml
                     '''
                 }
+                // <<< Moved inside steps so the stage’s braces stay balanced:
                 archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
             }
         }
@@ -170,20 +171,12 @@ pipeline {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
-                        # Server-side apply for faster, merge-on-server, and bail after 2m
-                        kubectl apply --server-side \
-                                      --request-timeout=2m \
-                                      -f rendered-deployment.yaml \
-                                      --record
-
-                        # Wait up to 20m for rollout
-                        kubectl rollout status deployment/nginx-deployment \
-                                              --timeout=1200s
+                        kubectl apply -f rendered-deployment.yaml --record
+                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
                     '''
                 }
             }
         }
-
 
         stage('Verify deployment') {
             steps {
@@ -191,7 +184,7 @@ pipeline {
                     sh '''
                         echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                         kubectl get pods -l app=nginx \
-                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[].image,READY:.status.containerStatuses[].ready,START_TIME:.status.startTime' \
+                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
                           --no-headers
                         echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
                     '''
