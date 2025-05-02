@@ -20,8 +20,9 @@ public class App {
                 <head>
                   <meta charset="UTF-8">
                   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                  <title>Hello, Jenkins!</title>
+                  <title>Jenkins Deployment</title>
                   <style>
+                    /* full-viewport gradient + border */
                     body {
                       margin: 0;
                       height: 100vh;
@@ -30,49 +31,62 @@ public class App {
                       align-items: center;
                       justify-content: center;
                       background: linear-gradient(135deg, #ff6ec4, #7873f5);
+                      border: 10px solid rgba(255, 255, 255, 0.4);
+                      box-sizing: border-box;
                       font-family: 'Segoe UI', sans-serif;
                       color: #fff;
                     }
                     h1 {
-                      font-size: 4rem;
-                      text-shadow: 2px 2px rgba(0,0,0,0.2);
-                      animation: pulse 2s infinite ease-in-out;
-                    }
-                    @keyframes pulse {
-                      0%,100% { transform: scale(1); }
-                      50%     { transform: scale(1.1); }
+                      font-size: 3rem;
+                      text-align: center;
+                      text-shadow: 2px 2px rgba(0,0,0,0.3);
+                      margin: 0;
                     }
                     button {
                       margin-top: 2rem;
                       padding: 0.75rem 1.5rem;
                       font-size: 1.25rem;
-                      border: none;
+                      border: 2px solid #fff;
                       border-radius: 0.5rem;
-                      background: rgba(255,255,255,0.3);
+                      background: rgba(255,255,255,0.2);
                       color: #fff;
                       cursor: pointer;
-                      transition: background 0.3s;
+                      transition: background 0.3s, transform 0.2s;
                     }
                     button:hover {
-                      background: rgba(255,255,255,0.5);
+                      background: rgba(255,255,255,0.4);
+                      transform: scale(1.05);
                     }
-                    #time {
-                      margin-top: 1rem;
-                      font-size: 1.5rem;
+                    #datetime {
+                      margin-top: 1.5rem;
+                      font-size: 1.25rem;
                       font-weight: bold;
                     }
                   </style>
                 </head>
                 <body>
-                  <h1>Hello, Jenkins!</h1>
-                  <button onclick="showTime()">What time is it?</button>
-                  <div id="time"></div>
+                  <h1>This WebPage is deployed by Jenkins CI/CD Pipelines</h1>
+                  <button onclick="showDateTime()">Show Date & Time (IST)</button>
+                  <div id="datetime"></div>
                   <script>
-                    function showTime() {
+                    function showDateTime() {
                       const now = new Date();
-                      document.getElementById('time').textContent =
-                        now.toLocaleTimeString();
+                      // format date+time in IST
+                      const opts = {
+                        timeZone: 'Asia/Kolkata',
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                      };
+                      const formatted = now.toLocaleString('en-GB', opts);
+                      document.getElementById('datetime').textContent =
+                        `Today Date & Time in IST: ${formatted}`;
                     }
+                    // show immediately on load
+                    window.onload = showDateTime;
                   </script>
                 </body>
                 </html>
