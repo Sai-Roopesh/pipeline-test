@@ -39,7 +39,7 @@ pipeline {
             }
         }
 
-       /* stage('Smoke Test') {
+       stage('Smoke Test') {
             steps {
                 sh '''
                     set -eu
@@ -99,7 +99,7 @@ pipeline {
                     sh 'mvn deploy -DskipTests'
                 }
             }
-        }*/
+        }
 
         stage('Build & Push Docker image') {
             steps {
