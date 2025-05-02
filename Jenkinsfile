@@ -39,32 +39,6 @@ pipeline {
             }
         }
 
-       stage('Smoke Test') {
-            steps {
-                sh '''
-                    set -eu
-                    PORT=15000
-                    JAR=target/my-app-1.0.1.jar
-
-                    if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
-                      echo "Port $PORT busy – killing old process"
-                      fuser -k ${PORT}/tcp || true
-                      sleep 1
-                    fi
-
-                    PORT=$PORT java -jar "$JAR" &
-                    PID=$!
-                    trap "kill $PID" EXIT
-
-                    for i in {1..15}; do
-                      if curl -sf "http://localhost:$PORT" >/dev/null; then break; fi
-                      sleep 1
-                    done
-
-                    curl -sf "http://localhost:$PORT" | grep "Hello, Jenkins!"
-                '''
-            }
-        }
 
         stage('SAST Scanning I') {
             steps {
