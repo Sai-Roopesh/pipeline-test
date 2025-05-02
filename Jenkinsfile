@@ -28,7 +28,7 @@ pipeline {
             }
         }
 
-        stage('Build & Test') {
+        stage('Build Application') {
             steps {
                 sh 'mvn clean verify'
             }
@@ -66,7 +66,7 @@ pipeline {
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('SAST Scanning I') {
             steps {
                 withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                     withSonarQubeEnv('sonar') {
@@ -83,7 +83,7 @@ pipeline {
             }
         }
 
-        stage('Quality Gate') {
+        stage('SAST Scanning II') {
             steps {
                 timeout(time: 30, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
@@ -91,7 +91,7 @@ pipeline {
             }
         }
 
-        stage('Publish to Nexus') {
+        stage('Push to Nexus') {
             steps {
                 withMaven(globalMavenSettingsConfig: 'global-settings',
                           jdk: 'Java 21',
@@ -101,7 +101,7 @@ pipeline {
             }
         }
 
-        stage('Build & Push Docker image') {
+        stage('Build & Push Docker Container') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -120,7 +120,7 @@ pipeline {
         }
 
          
-stage('Prepare Trivy DB') {
+stage('Container Scanning I') {
   agent { label 'trivy' }
   steps {
     sh '''
@@ -135,7 +135,7 @@ stage('Prepare Trivy DB') {
 }
 
 
-stage('Trivy Image Scan') {
+stage('Container Scanning II') {
   agent { label 'trivy' }
   steps {
     withCredentials([usernamePassword(
@@ -166,7 +166,7 @@ stage('Trivy Image Scan') {
 
       
     
-        stage('Render manifest') {
+        stage('k8s Deployment I') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'docker-cred',
@@ -184,7 +184,7 @@ stage('Trivy Image Scan') {
             }
         }
 
-        stage('Deploy to k8s') {
+        stage('k8s Deployment II') {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
@@ -195,7 +195,7 @@ stage('Trivy Image Scan') {
             }
         }
 
-        stage('Verify deployment') {
+        stage('k8s Deployment III') {
             steps {
                 withKubeConfig(credentialsId: 'k8s-config') {
                     sh '''
