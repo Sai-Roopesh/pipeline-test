@@ -159,6 +159,7 @@ pipeline {
                                 kubectl get pods -l app=nginx \
                                   -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
                                   --no-headers
+                                sudo kubectl get svc
                                 echo "Verification Time: $(date '+%Y-%m-%d %H:%M:%S')"
                             '''
                         }
