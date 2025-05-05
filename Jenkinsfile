@@ -1,34 +1,28 @@
-/* ===== Helper: retry only on ABORT (OOM‑killer, timeout, manual stop) ===== */
-
 def retryOnAbort(int maxRetries = 1, Closure body) {
     int attempt = 0
     while (true) {
         try {
             body()
-            return                     // success
+            return
         } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
             attempt++
             if (attempt > maxRetries) {
-                throw e               // retries exhausted
+                throw e
             }
-            echo "Stage aborted (attempt ${attempt}/${maxRetries}) – retrying after 5 s"
+            echo "Stage aborted (attempt ${attempt}/${maxRetries}) – retrying after 5 s"
             sleep time: 5, unit: 'SECONDS'
         }
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-
 pipeline {
     agent any
 
-    /* ───── toolchains ───── */
     tools {
-        jdk   'Java 21'
+        jdk 'Java 21'
         maven 'Maven 3.8.1'
     }
 
-    /* ───── global env ───── */
     environment {
         JAVA_HOME    = tool 'Java 21'
         M2_HOME      = tool 'Maven 3.8.1'
@@ -42,9 +36,7 @@ pipeline {
 
         stage('Code Checkout') {
             steps {
-                git branch: 'main',
-                    url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
-                    credentialsId: 'git-cred-test'
+                git branch: 'main', url: 'https://github.com/Sai-Roopesh/pipeline-test.git', credentialsId: 'git-cred-test'
             }
         }
 
@@ -59,9 +51,7 @@ pipeline {
             }
         }
 
-        /* ────────────────── SAST SCANNING ────────────────── */
-
-        stage('SAST Scanning I') {
+        stage('SAST Scanning Pre') {
             steps {
                 script {
                     retryOnAbort(2) {
@@ -71,7 +61,7 @@ pipeline {
                                     sonar-scanner \
                                       -Dsonar.projectKey=pipeline-test \
                                       -Dsonar.sources=src/main/java \
-                                      -Dsonar.login=\$SONAR_TOKEN
+                                      -Dsonar.login=$SONAR_TOKEN
                                 """
                             }
                         }
@@ -80,7 +70,7 @@ pipeline {
             }
         }
 
-        stage('SAST Scanning II') {
+        stage('SAST Scanning Post') {
             steps {
                 script {
                     retryOnAbort(2) {
@@ -92,15 +82,11 @@ pipeline {
             }
         }
 
-        /* ────────────────── PUSH TO NEXUS ────────────────── */
-
         stage('Push to Nexus') {
             steps {
                 script {
                     retryOnAbort(2) {
-                        withMaven(globalMavenSettingsConfig: 'global-settings',
-                                  jdk: 'Java 21',
-                                  maven: 'Maven 3.8.1') {
+                        withMaven(globalMavenSettingsConfig: 'global-settings', jdk: 'Java 21', maven: 'Maven 3.8.1') {
                             sh 'mvn deploy -DskipTests'
                         }
                     }
@@ -108,17 +94,11 @@ pipeline {
             }
         }
 
-        /* ────────────────── DOCKER BUILD & PUSH ────────────────── */
-
-        stage('Build & Push Docker Container') {
+        stage('Build & Push Container to Image Registry') {
             steps {
                 script {
                     retryOnAbort(2) {
-                        withCredentials([usernamePassword(
-                            credentialsId: 'docker-cred',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'DOCKER_PASS')]) {
-
+                        withCredentials([usernamePassword(credentialsId: 'docker-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
                             docker.withRegistry('', 'docker-cred') {
                                 def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
                                 img.push()
@@ -129,36 +109,17 @@ pipeline {
             }
         }
 
-        /* ────────────────── TRIVY SCANS ────────────────── */
-
-        stage('Container Scanning I') {
+        stage('Container Scanning') {
             agent { label 'trivy' }
             steps {
                 script {
                     retryOnAbort(1) {
-                        sh '''
-                          CACHE_DIR="$HOME/.trivy-cache"
-                          mkdir -p "$CACHE_DIR"
-                          trivy image \
-                            --download-db-only \
-                            --cache-dir "$CACHE_DIR"
-                        '''
-                    }
-                }
-            }
-        }
-
-        stage('Container Scanning II') {
-            agent { label 'trivy' }
-            steps {
-                script {
-                    retryOnAbort(1) {
-                        withCredentials([usernamePassword(
-                            credentialsId: 'docker-cred',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'IGNORED')]) {
+                        withCredentials([usernamePassword(credentialsId: 'docker-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'IGNORED')]) {
                             sh '''
                               CACHE_DIR="$HOME/.trivy-cache"
+                              mkdir -p "$CACHE_DIR"
+                              # refresh vulnerability database then scan the image
+                              trivy image --download-db-only --cache-dir "$CACHE_DIR"
                               trivy image \
                                 --cache-dir "$CACHE_DIR" \
                                 --timeout 30m \
@@ -179,48 +140,21 @@ pipeline {
             }
         }
 
-        /* ────────────────── KUBERNETES DEPLOY ────────────────── */
-
-        stage('k8s Deployment I') {
+        stage('Deployment to k8s') {
             steps {
                 script {
                     retryOnAbort(1) {
-                        withCredentials([usernamePassword(
-                            credentialsId: 'docker-cred',
-                            usernameVariable: 'DOCKER_USER',
-                            passwordVariable: 'IGNORED')]) {
+                        withCredentials([usernamePassword(credentialsId: 'docker-cred', usernameVariable: 'DOCKER_USER', passwordVariable: 'IGNORED')]) {
                             sh '''
                                 export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
                                 envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
                             '''
                         }
                         archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
-                    }
-                }
-            }
-        }
-
-        stage('k8s Deployment II') {
-            steps {
-                script {
-                    retryOnAbort(1) {
                         withKubeConfig(credentialsId: 'k8s-config') {
                             sh '''
                                 kubectl apply -f rendered-deployment.yaml --record
                                 kubectl rollout status deployment/nginx-deployment --timeout=1200s
-                            '''
-                        }
-                    }
-                }
-            }
-        }
-
-        stage('k8s Deployment III') {
-            steps {
-                script {
-                    retryOnAbort(1) {
-                        withKubeConfig(credentialsId: 'k8s-config') {
-                            sh '''
                                 echo "Verification Time: $(date '+%Y-%m-%d %H:%M:%S')"
                                 kubectl get pods -l app=nginx \
                                   -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
@@ -232,10 +166,7 @@ pipeline {
                 }
             }
         }
-
-    } // end stages
-
-    /* ────────────────── POST ────────────────── */
+    }
 
     post {
         always {
@@ -244,7 +175,7 @@ pipeline {
         success {
             script {
                 def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
-                mail to:      email,
+                mail to: email,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                      body: """
 Hello,
@@ -253,7 +184,8 @@ Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #
 
 See details: ${env.BUILD_URL}
 
-Best,\nJenkins CI/CD
+Best,
+Jenkins CI/CD
 """
             }
         }
