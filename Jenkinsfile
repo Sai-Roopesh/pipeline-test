@@ -19,7 +19,7 @@ pipeline {
     agent any
 
     tools {
-        jdk 'Java 21'
+        jdk   'Java 21'
         maven 'Maven 3.8.1'
     }
 
@@ -33,7 +33,6 @@ pipeline {
     triggers { githubPush() }
 
     stages {
-
         stage('Code Checkout') {
             steps {
                 git branch: 'main', url: 'https://github.com/Sai-Roopesh/pipeline-test.git', credentialsId: 'git-cred-test'
@@ -118,8 +117,10 @@ pipeline {
                             sh '''
                               CACHE_DIR="$HOME/.trivy-cache"
                               mkdir -p "$CACHE_DIR"
-                              # refresh vulnerability database then scan the image
-                              trivy image --download-db-only --cache-dir "$CACHE_DIR"
+                              trivy image \
+                                --download-db-only \
+                                --cache-dir "$CACHE_DIR"
+
                               trivy image \
                                 --cache-dir "$CACHE_DIR" \
                                 --timeout 30m \
@@ -154,9 +155,9 @@ pipeline {
                         withKubeConfig(credentialsId: 'k8s-config') {
                             sh '''
                                 kubectl apply -f rendered-deployment.yaml --record
-                                kubectl rollout status deployment/nginx-deployment --timeout=1200s
+                                kubectl rollout status deployment/boardgame --timeout=1200s
                                 echo "Verification Time: $(date '+%Y-%m-%d %H:%M:%S')"
-                                kubectl get pods -l app=nginx \
+                                kubectl get pods -l app=boardgame \
                                   -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
                                   --no-headers
                                 kubectl get svc
@@ -178,15 +179,14 @@ pipeline {
                 def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
                 mail to: email,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                     body: """
+                     body: """\
 Hello,
 
 Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #${env.BUILD_NUMBER}).
 
 See details: ${env.BUILD_URL}
 
-Best,
-Jenkins CI/CD
+Best,\nJenkins CI/CD
 """
             }
         }
