@@ -1,3 +1,24 @@
+/* ===== Helper: retry only on ABORT (OOM‑killer, timeout, manual stop) ===== */
+
+def retryOnAbort(int maxRetries = 1, Closure body) {
+    int attempt = 0
+    while (true) {
+        try {
+            body()
+            return                     // success
+        } catch (org.jenkinsci.plugins.workflow.steps.FlowInterruptedException e) {
+            attempt++
+            if (attempt > maxRetries) {
+                throw e               // retries exhausted
+            }
+            echo "Stage aborted (attempt ${attempt}/${maxRetries}) – retrying after 5 s"
+            sleep time: 5, unit: 'SECONDS'
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+
 pipeline {
     agent any
 
@@ -13,14 +34,13 @@ pipeline {
         M2_HOME      = tool 'Maven 3.8.1'
         SCANNER_HOME = tool 'sonar-scanner'
         PATH         = "${JAVA_HOME}/bin:${M2_HOME}/bin:${SCANNER_HOME}/bin:${env.PATH}"
-      
     }
 
     triggers { githubPush() }
 
     stages {
 
-        stage('Checkout') {
+        stage('Code Checkout') {
             steps {
                 git branch: 'main',
                     url:           'https://github.com/Sai-Roopesh/pipeline-test.git',
@@ -39,19 +59,22 @@ pipeline {
             }
         }
 
+        /* ────────────────── SAST SCANNING ────────────────── */
 
         stage('SAST Scanning I') {
             steps {
-                withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                    withSonarQubeEnv('sonar') {
-                        sh """
-                            sonar-scanner \
-                              -Dsonar.projectKey=pipeline-test \
-                              -Dsonar.sources=src/main/java \
-                              -Dsonar.tests=src/test/java \
-                              -Dsonar.java.binaries=target/classes \
-                              -Dsonar.login=\\$SONAR_TOKEN
-                        """
+                script {
+                    retryOnAbort(2) {
+                        withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                            withSonarQubeEnv('sonar') {
+                                sh """
+                                    sonar-scanner \
+                                      -Dsonar.projectKey=pipeline-test \
+                                      -Dsonar.sources=src/main/java \
+                                      -Dsonar.login=\$SONAR_TOKEN
+                                """
+                            }
+                        }
                     }
                 }
             }
@@ -59,131 +82,160 @@ pipeline {
 
         stage('SAST Scanning II') {
             steps {
-                timeout(time: 30, unit: 'MINUTES') {
-                    waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Push to Nexus') {
-            steps {
-                withMaven(globalMavenSettingsConfig: 'global-settings',
-                          jdk: 'Java 21',
-                          maven: 'Maven 3.8.1') {
-                    sh 'mvn deploy -DskipTests'
-                }
-            }
-        }
-
-        stage('Build & Push Docker Container') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'DOCKER_PASS'
-                )]) {
-                    script {
-                        docker.withRegistry('', 'docker-cred') {
-                            def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
-                            img.push()
-              
+                script {
+                    retryOnAbort(2) {
+                        timeout(time: 30, unit: 'MINUTES') {
+                            waitForQualityGate abortPipeline: true
                         }
                     }
                 }
             }
         }
 
-         
-stage('Container Scanning I') {
-  agent { label 'trivy' }
-  steps {
-    sh '''
-      CACHE_DIR="$HOME/.trivy-cache"
-      mkdir -p "$CACHE_DIR"
-      # download only the database into the cache
-      trivy image \
-        --download-db-only \
-        --cache-dir "$CACHE_DIR"
-    '''
-  }
-}
+        /* ────────────────── PUSH TO NEXUS ────────────────── */
 
+        stage('Push to Nexus') {
+            steps {
+                script {
+                    retryOnAbort(2) {
+                        withMaven(globalMavenSettingsConfig: 'global-settings',
+                                  jdk: 'Java 21',
+                                  maven: 'Maven 3.8.1') {
+                            sh 'mvn deploy -DskipTests'
+                        }
+                    }
+                }
+            }
+        }
 
-stage('Container Scanning II') {
-  agent { label 'trivy' }
-  steps {
-    withCredentials([usernamePassword(
-      credentialsId: 'docker-cred',
-      usernameVariable: 'DOCKER_USER',
-      passwordVariable: 'IGNORED'
-    )]) {
-      sh '''
-        CACHE_DIR="$HOME/.trivy-cache"
-        trivy image \
-          --cache-dir "$CACHE_DIR" \
-          --timeout 30m \
-          --exit-code 1 \
-          --severity HIGH,CRITICAL \
-          --format table \
-          -o trivy.txt \
-          ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
-      '''
-    }
-  }
-  post {
-    always {
-      archiveArtifacts artifacts: 'trivy.txt', fingerprint: true
-    }
-  }
-}
+        /* ────────────────── DOCKER BUILD & PUSH ────────────────── */
 
+        stage('Build & Push Docker Container') {
+            steps {
+                script {
+                    retryOnAbort(2) {
+                        withCredentials([usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'DOCKER_PASS')]) {
 
-      
-    
+                            docker.withRegistry('', 'docker-cred') {
+                                def img = docker.build("${DOCKER_USER}/boardgame:${BUILD_NUMBER}")
+                                img.push()
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        /* ────────────────── TRIVY SCANS ────────────────── */
+
+        stage('Container Scanning I') {
+            agent { label 'trivy' }
+            steps {
+                script {
+                    retryOnAbort(1) {
+                        sh '''
+                          CACHE_DIR="$HOME/.trivy-cache"
+                          mkdir -p "$CACHE_DIR"
+                          trivy image \
+                            --download-db-only \
+                            --cache-dir "$CACHE_DIR"
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Container Scanning II') {
+            agent { label 'trivy' }
+            steps {
+                script {
+                    retryOnAbort(1) {
+                        withCredentials([usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'IGNORED')]) {
+                            sh '''
+                              CACHE_DIR="$HOME/.trivy-cache"
+                              trivy image \
+                                --cache-dir "$CACHE_DIR" \
+                                --timeout 30m \
+                                --exit-code 1 \
+                                --severity HIGH,CRITICAL \
+                                --format table \
+                                -o trivy.txt \
+                                ${DOCKER_USER}/boardgame:${BUILD_NUMBER}
+                            '''
+                        }
+                    }
+                }
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy.txt', fingerprint: true
+                }
+            }
+        }
+
+        /* ────────────────── KUBERNETES DEPLOY ────────────────── */
+
         stage('k8s Deployment I') {
             steps {
-                withCredentials([usernamePassword(
-                    credentialsId: 'docker-cred',
-                    usernameVariable: 'DOCKER_USER',
-                    passwordVariable: 'IGNORED'
-                )]) {
-                    sh '''
-                        export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
-                        envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml \
-                                 > rendered-deployment.yaml
-                    '''
+                script {
+                    retryOnAbort(1) {
+                        withCredentials([usernamePassword(
+                            credentialsId: 'docker-cred',
+                            usernameVariable: 'DOCKER_USER',
+                            passwordVariable: 'IGNORED')]) {
+                            sh '''
+                                export IMG_TAG="$DOCKER_USER/boardgame:${BUILD_NUMBER}"
+                                envsubst < /var/lib/jenkins/k8s-manifest/deployment.yaml > rendered-deployment.yaml
+                            '''
+                        }
+                        archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
+                    }
                 }
-                // <<< Moved inside steps so the stage’s braces stay balanced:
-                archiveArtifacts artifacts: 'rendered-deployment.yaml', fingerprint: true
             }
         }
 
         stage('k8s Deployment II') {
             steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                        kubectl apply -f rendered-deployment.yaml --record
-                        kubectl rollout status deployment/nginx-deployment --timeout=1200s
-                    '''
+                script {
+                    retryOnAbort(1) {
+                        withKubeConfig(credentialsId: 'k8s-config') {
+                            sh '''
+                                kubectl apply -f rendered-deployment.yaml --record
+                                kubectl rollout status deployment/nginx-deployment --timeout=1200s
+                            '''
+                        }
+                    }
                 }
             }
         }
 
         stage('k8s Deployment III') {
             steps {
-                withKubeConfig(credentialsId: 'k8s-config') {
-                    sh '''
-                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
-                        kubectl get pods -l app=nginx \
-                          -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
-                          --no-headers
-                        echo "Verification Time: $(date +' %Y-%m-%d %H:%M:%S')"
-                    '''
+                script {
+                    retryOnAbort(1) {
+                        withKubeConfig(credentialsId: 'k8s-config') {
+                            sh '''
+                                echo "Verification Time: $(date '+%Y-%m-%d %H:%M:%S')"
+                                kubectl get pods -l app=nginx \
+                                  -o custom-columns='NAME:.metadata.name,IMAGE:.spec.containers[*].image,READY:.status.containerStatuses[*].ready,START_TIME:.status.startTime' \
+                                  --no-headers
+                                echo "Verification Time: $(date '+%Y-%m-%d %H:%M:%S')"
+                            '''
+                        }
+                    }
                 }
             }
         }
 
     } // end stages
+
+    /* ────────────────── POST ────────────────── */
 
     post {
         always {
@@ -191,10 +243,7 @@ stage('Container Scanning II') {
         }
         success {
             script {
-                def email = sh(
-                    script: "git --no-pager show -s --format='%ae'",
-                    returnStdout: true
-                ).trim()
+                def email = sh(script: "git --no-pager show -s --format='%ae'", returnStdout: true).trim()
                 mail to:      email,
                      subject: "✅ Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                      body: """
@@ -204,9 +253,8 @@ Your commit triggered a successful deployment for job '${env.JOB_NAME}' (build #
 
 See details: ${env.BUILD_URL}
 
-Best,
-Jenkins CI/CD
-                     """
+Best,\nJenkins CI/CD
+"""
             }
         }
     }
