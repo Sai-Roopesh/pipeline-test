@@ -35,8 +35,7 @@ class AppTest {
     static void stopServer() {
         /* daemon thread exits with JVM */ }
 
-    /* helpers */
-    private static String getBody(String path) throws Exception {
+    private static String fetch(String path) throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(BASE + path).openConnection();
         try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
             return r.lines().collect(Collectors.joining("\n"));
@@ -44,23 +43,23 @@ class AppTest {
     }
 
     @Test
-    void indexReturns200AndHtml() throws Exception {
+    void indexReturnsHtmlAndContainsButtons() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(BASE + "/").openConnection();
         assertEquals(200, c.getResponseCode());
         assertEquals("text/html; charset=UTF-8", c.getHeaderField("Content-Type"));
+
+        String body = fetch("/");
+        assertTrue(body.contains("Rock – Paper – Scissors"));
+        assertTrue(body.contains("button onclick=\"play('rock')\""));
     }
 
     @Test
-    void pageContainsHeadingAndButton() throws Exception {
-        String body = getBody("/");
-        assertTrue(body.contains("<h1>Roll the Dice!</h1>"));
-        assertTrue(body.contains("<button onclick=\"roll()\">"));
-    }
-
-    @Test
-    void rollEndpointReturnsNumberOneToSix() throws Exception {
-        String result = getBody("/roll").trim();
-        int value = Integer.parseInt(result);
-        assertTrue(value >= 1 && value <= 6, "roll should be between 1 and 6");
+    void playEndpointReturnsValidMessage() throws Exception {
+        String resp = fetch("/play?move=rock").toLowerCase();
+        assertTrue(resp.contains("you: rock"), "Should echo player move");
+        assertTrue(resp.contains("cpu:"), "Should show CPU move");
+        assertTrue(
+                resp.contains("you win!") || resp.contains("cpu wins!") || resp.contains("draw"),
+                "Should declare an outcome");
     }
 }

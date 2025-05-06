@@ -2,17 +2,23 @@ package com.example;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.Map;
 import java.util.logging.Logger;
 
 public class App {
   private static final Logger log = Logger.getLogger(App.class.getName());
   private static final SecureRandom RNG = new SecureRandom();
+  private static final String[] MOVES = { "rock", "paper", "scissors" };
 
   public static void main(String[] args) throws Exception {
     int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "15000"));
 
     HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
+
+    /* ---------- HTML UI ---------- */
     server.createContext("/", exchange -> {
       String html = """
           <!DOCTYPE html>
@@ -20,70 +26,72 @@ public class App {
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>BoardGame – Roll the Dice</title>
+            <title>Rock – Paper – Scissors</title>
             <style>
-              body {
-                margin: 0;
-                height: 100vh;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                font-family: 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg,#09c6f9,#045de9);
-                color: #fff;
-              }
-              h1   { margin: 0 0 1.5rem 0; font-size: 2.5rem; }
-              #result { font-size: 4rem; margin-top: 1rem; }
-              button {
-                padding: .75rem 2rem;
-                font-size: 1.25rem;
-                border: 2px solid #fff;
-                border-radius: 8px;
-                background: rgba(255,255,255,.2);
-                color:#fff;
-                cursor:pointer;
-                transition:background .3s,transform .2s;
-              }
-              button:hover { background:rgba(255,255,255,.4); transform:scale(1.05); }
+              body{margin:0;height:100vh;display:flex;flex-direction:column;
+                   align-items:center;justify-content:center;font-family:Segoe UI,sans-serif;
+                   background:linear-gradient(135deg,#ff9966,#ff5e62);color:#fff}
+              h1{margin-bottom:1.5rem}
+              button{margin:.25rem;padding:.75rem 1.5rem;font-size:1.1rem;border:2px solid #fff;
+                     background:rgba(255,255,255,.2);border-radius:6px;color:#fff;cursor:pointer}
+              button:hover{background:rgba(255,255,255,.4)}
+              #result{margin-top:1.5rem;font-size:1.5rem;font-weight:bold}
             </style>
           </head>
           <body>
-            <h1>Roll the Dice!</h1>
-            <button onclick="roll()">Roll</button>
-            <div id="result">–</div>
+            <h1>Rock – Paper – Scissors</h1>
+            <div>
+              <button onclick="play('rock')">Rock</button>
+              <button onclick="play('paper')">Paper</button>
+              <button onclick="play('scissors')">Scissors</button>
+            </div>
+            <div id="result">Choose your move!</div>
 
             <script>
-              function roll() {
-                fetch('/roll')
-                  .then(r => r.text())
-                  .then(num => document.getElementById('result').textContent = num);
+              function play(move){
+                fetch('/play?move='+move)
+                  .then(r=>r.text())
+                  .then(txt=>document.getElementById('result').textContent = txt);
               }
             </script>
           </body>
           </html>
           """;
-
-      byte[] bytes = html.getBytes();
-      exchange.getResponseHeaders().add("Content-Type", "text/html; charset=UTF-8");
-      exchange.sendResponseHeaders(200, bytes.length);
-      try (var os = exchange.getResponseBody()) {
-        os.write(bytes);
-      }
+      send(exchange, 200, "text/html; charset=UTF-8", html);
     });
 
-    /* /roll endpoint returns a random number 1‑6 as plain text */
-    server.createContext("/roll", exchange -> {
-      String roll = Integer.toString(RNG.nextInt(6) + 1);
-      byte[] bytes = roll.getBytes();
-      exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=UTF-8");
-      exchange.sendResponseHeaders(200, bytes.length);
-      try (var os = exchange.getResponseBody()) {
-        os.write(bytes);
-      }
+    /* ---------- /play endpoint ---------- */
+    server.createContext("/play", exchange -> {
+      String query = exchange.getRequestURI().getRawQuery(); // move=scissors
+      Map<String,String> qs = java.util.Arrays.stream(query.split("&"))
+          .map(s -> s.split("="))
+          .filter(p -> p.length == 2)
+          .collect(java.util.stream.Collectors.toMap(
+              p -> URLDecoder.decode(p[0], StandardCharsets.UTF_8),
+              p -> URLDecoder.decode(p[1], StandardCharsets.UTF_8)));
+
+      String player = qs.getOrDefault("move", "rock").toLowerCase();
+      String cpu    = MOVES[RNG.nextInt(3)];
+
+      String outcome =
+          player.equals(cpu)                  ? "It's a draw!" :
+          player.equals("rock")     && cpu.equals("scissors") ||
+          player.equals("paper")    && cpu.equals("rock")     ||
+          player.equals("scissors") && cpu.equals("paper")    ? "You win!" : "CPU wins!";
+
+      String message = "You: " + player + " — CPU: " + cpu + " → " + outcome;
+      send(exchange, 200, "text/plain; charset=UTF-8", message);
     });
 
     server.start();
-    log.info("BoardGame server started at http://0.0.0.0:" + port);
+    log.info("RPS server started at http://0.0.0.0:" + port);
+  }
+
+  private static void send(com.sun.net.httpserver.HttpExchange ex, int code,
+                           String ctype, String body) throws java.io.IOException {
+    byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+    ex.getResponseHeaders().add("Content-Type", ctype);
+    ex.sendResponseHeaders(code, bytes.length);
+    try (var os = ex.getResponseBody()) { os.write(bytes); }
   }
 }
