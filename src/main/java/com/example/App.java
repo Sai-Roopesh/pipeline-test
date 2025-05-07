@@ -1,15 +1,15 @@
+// src/main/java/com/example/App.java
 package com.example;
 
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
-import java.security.SecureRandom;
 import java.util.logging.Logger;
 
 public class App {
   private static final Logger log = Logger.getLogger(App.class.getName());
-  private static final SecureRandom RNG = new SecureRandom();
 
   public static void main(String[] args) throws Exception {
+    // read PORT from env, default to 15000
     int port = Integer.parseInt(System.getenv().getOrDefault("PORT", "15000"));
 
     HttpServer server = HttpServer.create(new InetSocketAddress(port), 0);
@@ -20,7 +20,7 @@ public class App {
           <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>BoardGame – Roll the Dice</title>
+            <title>Hello, Jenkins!</title>
             <style>
               body {
                 margin: 0;
@@ -29,35 +29,49 @@ public class App {
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
+                background: linear-gradient(135deg, #ff6ec4, #7873f5);
                 font-family: 'Segoe UI', sans-serif;
-                background: linear-gradient(135deg,#09c6f9,#045de9);
                 color: #fff;
               }
-              h1   { margin: 0 0 1.5rem 0; font-size: 2.5rem; }
-              #result { font-size: 4rem; margin-top: 1rem; }
-              button {
-                padding: .75rem 2rem;
-                font-size: 1.25rem;
-                border: 2px solid #fff;
-                border-radius: 8px;
-                background: rgba(255,255,255,.2);
-                color:#fff;
-                cursor:pointer;
-                transition:background .3s,transform .2s;
+              h1 {
+                font-size: 4rem;
+                text-shadow: 2px 2px rgba(0,0,0,0.2);
+                animation: pulse 2s infinite ease-in-out;
               }
-              button:hover { background:rgba(255,255,255,.4); transform:scale(1.05); }
+              @keyframes pulse {
+                0%,100% { transform: scale(1); }
+                50%     { transform: scale(1.1); }
+              }
+              button {
+                margin-top: 2rem;
+                padding: 0.75rem 1.5rem;
+                font-size: 1.25rem;
+                border: none;
+                border-radius: 0.5rem;
+                background: rgba(255,255,255,0.3);
+                color: #fff;
+                cursor: pointer;
+                transition: background 0.3s;
+              }
+              button:hover {
+                background: rgba(255,255,255,0.5);
+              }
+              #time {
+                margin-top: 1rem;
+                font-size: 1.5rem;
+                font-weight: bold;
+              }
             </style>
           </head>
           <body>
-            <h1>Roll the Dice!</h1>
-            <button onclick="roll()">Roll</button>
-            <div id="result">–</div>
-
+            <h1>Hello, Jenkins!</h1>
+            <button onclick="showTime()">What time is it?</button>
+            <div id="time"></div>
             <script>
-              function roll() {
-                fetch('/roll')
-                  .then(r => r.text())
-                  .then(num => document.getElementById('result').textContent = num);
+              function showTime() {
+                const now = new Date();
+                document.getElementById('time').textContent =
+                  now.toLocaleTimeString();
               }
             </script>
           </body>
@@ -72,18 +86,7 @@ public class App {
       }
     });
 
-    /* /roll endpoint returns a random number 1‑6 as plain text */
-    server.createContext("/roll", exchange -> {
-      String roll = Integer.toString(RNG.nextInt(6) + 1);
-      byte[] bytes = roll.getBytes();
-      exchange.getResponseHeaders().add("Content-Type", "text/plain; charset=UTF-8");
-      exchange.sendResponseHeaders(200, bytes.length);
-      try (var os = exchange.getResponseBody()) {
-        os.write(bytes);
-      }
-    });
-
     server.start();
-    log.info("BoardGame server started at http://0.0.0.0:" + port);
+    log.info("Server started at http://0.0.0.0:" + port);
   }
 }

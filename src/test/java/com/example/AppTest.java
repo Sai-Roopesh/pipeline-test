@@ -10,15 +10,16 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.stream.Collectors;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class AppTest {
 
     private static Thread serverThread;
-    private static final String BASE = "http://localhost:15000";
 
     @BeforeAll
     static void startServer() throws Exception {
+        // launch the HTTP server in a daemon thread
         serverThread = new Thread(() -> {
             try {
                 App.main(new String[] {});
@@ -28,39 +29,39 @@ class AppTest {
         });
         serverThread.setDaemon(true);
         serverThread.start();
-        Thread.sleep(2000); // give server time to bind
+
+        // give it a moment to bind to port 15000
+        Thread.sleep(2000);
     }
 
     @AfterAll
     static void stopServer() {
-        /* daemon thread exits with JVM */ }
+        // daemon thread will exit when tests complete
+    }
 
-    /* helpers */
-    private static String getBody(String path) throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(BASE + path).openConnection();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(c.getInputStream()))) {
-            return r.lines().collect(Collectors.joining("\n"));
+    @Test
+    void helloEndpointReturnsFunkyHtml() throws Exception {
+        URL url = new URL("http://localhost:15000/");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("GET");
+
+        // verify status code
+        int status = conn.getResponseCode();
+        assertEquals(200, status, "Expected HTTP 200 OK");
+
+        // verify Content-Type header
+        String contentType = conn.getHeaderField("Content-Type");
+        assertEquals("text/html; charset=UTF-8", contentType);
+
+        // read entire body
+        String body;
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(conn.getInputStream()))) {
+            body = reader.lines().collect(Collectors.joining("\n"));
         }
-    }
 
-    @Test
-    void indexReturns200AndHtml() throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(BASE + "/").openConnection();
-        assertEquals(200, c.getResponseCode());
-        assertEquals("text/html; charset=UTF-8", c.getHeaderField("Content-Type"));
-    }
-
-    @Test
-    void pageContainsHeadingAndButton() throws Exception {
-        String body = getBody("/");
-        assertTrue(body.contains("<h1>Roll the Dice!</h1>"));
-        assertTrue(body.contains("<button onclick=\"roll()\">"));
-    }
-
-    @Test
-    void rollEndpointReturnsNumberOneToSix() throws Exception {
-        String result = getBody("/roll").trim();
-        int value = Integer.parseInt(result);
-        assertTrue(value >= 1 && value <= 6, "roll should be between 1 and 6");
+        // assert that the H1 heading is present
+        assertTrue(body.contains("<h1>Hello, Jenkins!</h1>"),
+                "Response should contain the main heading");
     }
 }
